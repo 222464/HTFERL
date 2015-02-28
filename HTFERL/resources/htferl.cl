@@ -291,7 +291,7 @@ void kernel layerWeightUpdate(read_only image2d_t visibleReconstruction, read_on
 		wi++;
 	}
 	
-	float error = sum / wi * thisHiddenActivation * (1.0f - thisHiddenActivation);
+	float error = sum * thisHiddenActivation * (1.0f - thisHiddenActivation);
 	
 	// --------------------------------- Update on Error ---------------------------------
 	

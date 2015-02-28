@@ -325,7 +325,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._hiddenStates);
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiases);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._feedBackReconstruction);
 		_layerVisibleReconstructKernel.setArg(index++, reverseReceptiveRadius);
 		_layerVisibleReconstructKernel.setArg(index++, receptiveFieldRadius);
@@ -342,7 +342,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerHiddenReconstructKernel.setArg(index++, _layers[l]._hiddenStates);
 		_layerHiddenReconstructKernel.setArg(index++, _layers[l]._lateralWeights);
 		_layerHiddenReconstructKernel.setArg(index++, _layers[l]._hiddenVisibleBiasesPrev);
-		_layerHiddenReconstructKernel.setArg(index++, _layers[l]._feedBackReconstruction);
+		_layerHiddenReconstructKernel.setArg(index++, _layers[l]._lateralReconstruction);
 		_layerHiddenReconstructKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 		_layerHiddenReconstructKernel.setArg(index++, _layerDescs[l]._inhibitionRadius);
 		_layerHiddenReconstructKernel.setArg(index++, layerSize);
