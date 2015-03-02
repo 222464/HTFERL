@@ -49,7 +49,9 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 
 	for (int l = 0; l < _layers.size(); l++) {
 		int numFeedForwardWeights = std::pow(_layerDescs[l]._receptiveFieldRadius * 2 + 1, 2);
+		int numReconstructionWeights = std::pow(_layerDescs[l]._reconstructionRadius * 2 + 1, 2);
 		int numLateralWeights = std::pow(_layerDescs[l]._lateralConnectionRadius * 2 + 1, 2);
+		int numFeedBackWeights = std::pow(_layerDescs[l]._feedBackConnectionRadius * 2 + 1, 2);
 
 		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenFeedBackActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
@@ -60,6 +62,9 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		_layers[l]._feedForwardWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
 		_layers[l]._feedForwardWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
 
+		_layers[l]._reconstructionWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight, numReconstructionWeights);
+		_layers[l]._reconstructionWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight, numReconstructionWeights);
+
 		_layers[l]._visibleBiases = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight);
 		_layers[l]._visibleBiasesPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight);
 
@@ -68,6 +73,9 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 
 		_layers[l]._lateralWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numLateralWeights);
 		_layers[l]._lateralWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numLateralWeights);
+
+		_layers[l]._feedBackWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedBackWeights);
+		_layers[l]._feedBackWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedBackWeights);
 
 		_layers[l]._visibleReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 		_layers[l]._visibleReconstructionPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
@@ -190,6 +198,34 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			region[2] = numLateralWeights;
 
 			cs.getQueue().enqueueCopyImage(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev, origin, origin, region);
+		}
+
+		{
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = _layerDescs[l]._width;
+			region[1] = _layerDescs[l]._height;
+			region[2] = numFeedBackWeights;
+
+			cs.getQueue().enqueueCopyImage(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev, origin, origin, region);
+		}
+
+		{
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = prevWidth;
+			region[1] = prevHeight;
+			region[2] = numReconstructionWeights;
+
+			cs.getQueue().enqueueCopyImage(_layers[l]._reconstructionWeights, _layers[l]._reconstructionWeightsPrev, origin, origin, region);
 		}
 
 		prevWidth = _layerDescs[l]._width;
@@ -324,6 +360,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
+		pPrevLayer = &_layers[l]._hiddenStates;
 		prevWidth = _layerDescs[l]._width;
 		prevHeight = _layerDescs[l]._height;
 	}
@@ -339,6 +376,17 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 	// ------------------------------------------------------------------------------
 
 	for (int l = _layers.size() - 1; l >= 0; l--) {
+		if (l > 0) {
+			pPrevLayer = &_layers[l - 1]._hiddenStates;
+			prevWidth = _layerDescs[l - 1]._width;
+			prevHeight = _layerDescs[l - 1]._height;
+		}
+		else {
+			pPrevLayer = &_inputImage;
+			prevWidth = _inputWidth;
+			prevHeight = _inputHeight;
+		}
+
 		float localActivity = std::round(_layerDescs[l]._sparsity * std::pow(2 * _layerDescs[l]._inhibitionRadius + 1, 2));
 
 		Int2 layerSize;
@@ -448,8 +496,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerVisibleWeightUpdateKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
-
-		index = 0;
 
 		// --------------------- Make Predictions (Reconstruction) ---------------------
 
