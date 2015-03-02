@@ -81,7 +81,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenFeedForwardActivations);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
-		initializeLayerHiddenKernel.setArg(index++, _layers[l]._visibleReconstruction);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenStates);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._feedForwardWeights);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenBiases);
@@ -102,6 +101,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		index = 0;
 
 		initializeLayerVisibleKernel.setArg(index++, _layers[l]._visibleBiases);
+		initializeLayerVisibleKernel.setArg(index++, _layers[l]._visibleReconstruction);
 		initializeLayerVisibleKernel.setArg(index++, initSeedVisible);
 		initializeLayerVisibleKernel.setArg(index++, minInitWeight);
 		initializeLayerVisibleKernel.setArg(index++, maxInitWeight);
@@ -332,7 +332,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 	// -------------------------------- Go back down --------------------------------
 	// ------------------------------------------------------------------------------
 
-	for (int l = _layers.size() - 1; l >= 0; l++) {
+	for (int l = _layers.size() - 1; l >= 0; l--) {
 		float localActivity = std::round(_layerDescs[l]._sparsity * std::pow(2 * _layerDescs[l]._inhibitionRadius + 1, 2));
 
 		Int2 layerSize;
@@ -429,6 +429,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		index = 0;
 
 		_layerVisibleWeightUpdateKernel.setArg(index++, *pPrevLayer);
+		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
