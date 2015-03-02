@@ -23,8 +23,10 @@ namespace htferl {
 			int _width, _height;
 
 			int _receptiveFieldRadius;
+			int _reconstructionRadius;
 			int _lateralConnectionRadius;
 			int _inhibitionRadius;
+			int _feedBackConnectionRadius;
 
 			float _sparsity;
 
@@ -34,20 +36,25 @@ namespace htferl {
 			float _traceDecay;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _lateralConnectionRadius(4), _inhibitionRadius(2),
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(4), _inhibitionRadius(2), _feedBackConnectionRadius(4),
 				_sparsity(0.05f), _dutyCycleDecay(0.01f), _alpha(0.1f), _beta(0.1f), _traceDecay(1.0f)
 			{}
 		};
 
 	private:
 		struct Layer {
-			cl::Image2D _hiddenActivations;
+			cl::Image2D _hiddenFeedForwardActivations;
+			cl::Image2D _hiddenFeedBackActivations;
 
 			cl::Image2D _hiddenStates;
 			cl::Image2D _hiddenStatesPrev;
+			cl::Image2D _hiddenStatesPrevPrev;
 
 			cl::Image3D _feedForwardWeights;
 			cl::Image3D _feedForwardWeightsPrev;
+
+			cl::Image3D _reconstructionWeights;
+			cl::Image3D _reconstructionWeightsPrev;
 
 			cl::Image2D _visibleBiases;
 			cl::Image2D _visibleBiasesPrev;
@@ -55,17 +62,14 @@ namespace htferl {
 			cl::Image2D _hiddenBiases;
 			cl::Image2D _hiddenBiasesPrev;
 
-			cl::Image2D _hiddenVisibleBiases;
-			cl::Image2D _hiddenVisibleBiasesPrev;
-
 			cl::Image3D _lateralWeights;
 			cl::Image3D _lateralWeightsPrev;
 
-			cl::Image2D _feedBackReconstruction;
-			cl::Image2D _feedBackReconstructionPrev;
+			cl::Image3D _feedBackWeights;
+			cl::Image3D _feedBackWeightsPrev;
 
-			cl::Image2D _lateralReconstruction;
-			cl::Image2D _lateralReconstructionPrev;
+			cl::Image2D _visibleReconstruction;
+			cl::Image2D _visibleReconstructionPrev;
 		};
 
 		int _inputWidth, _inputHeight;
@@ -73,13 +77,12 @@ namespace htferl {
 		std::vector<LayerDesc> _layerDescs;
 		std::vector<Layer> _layers;
 
-		cl::Kernel _layerHiddenActivateKernel;
+		cl::Kernel _layerHiddenFeedForwardActivateKernel;
+		cl::Kernel _layerHiddenFeedBackActivateKernel;
 		cl::Kernel _layerHiddenInhibitKernel;
 		cl::Kernel _layerVisibleReconstructKernel;
-		cl::Kernel _layerHiddenReconstructKernel;
-		cl::Kernel _layerWeightUpdateKernel;
-		cl::Kernel _layerVisibleBiasUpdateKernel;
-		cl::Kernel _layerHiddenVisibleBiasUpdateKernel;
+		cl::Kernel _layerHiddenWeightUpdateKernel;
+		cl::Kernel _layerVisibleWeightUpdateKernel;
 
 		std::vector<float> _input;
 
