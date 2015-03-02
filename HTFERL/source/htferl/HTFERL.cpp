@@ -329,6 +329,12 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 	}
 
 	// ------------------------------------------------------------------------------
+	// --------------------------------- Retrieve Q ---------------------------------
+	// ------------------------------------------------------------------------------
+
+
+
+	// ------------------------------------------------------------------------------
 	// -------------------------------- Go back down --------------------------------
 	// ------------------------------------------------------------------------------
 
@@ -358,10 +364,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		Float2 inputSizeMinusOneInv;
 		inputSizeMinusOneInv._x = 1.0f / (prevWidth - 1);
 		inputSizeMinusOneInv._y = 1.0f / (prevHeight - 1);
-
-		Int2 reverseReceptiveRadius;
-		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._width) / prevWidth * _layerDescs[l]._receptiveFieldRadius);
-		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._height) / prevHeight * _layerDescs[l]._receptiveFieldRadius);
 
 		Int2 receptiveFieldRadius;
 		receptiveFieldRadius._x = _layerDescs[l]._receptiveFieldRadius;
@@ -435,6 +437,12 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._reconstructionWeights);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleBiases);
+		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
+		_layerVisibleWeightUpdateKernel.setArg(index++, inputSizeMinusOne);
+		_layerVisibleWeightUpdateKernel.setArg(index++, inputSizeMinusOneInv);
+		_layerVisibleWeightUpdateKernel.setArg(index++, layerSize);
+		_layerVisibleWeightUpdateKernel.setArg(index++, layerSizeMinusOne);
+		_layerVisibleWeightUpdateKernel.setArg(index++, layerSizeMinusOneInv);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._alpha);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._beta);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
@@ -448,11 +456,10 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		index = 0;
 
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._hiddenStates);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._reconstructionWeights);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiases);
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleReconstruction);
-		_layerVisibleReconstructKernel.setArg(index++, reverseReceptiveRadius);
-		_layerVisibleReconstructKernel.setArg(index++, receptiveFieldRadius);
+		_layerVisibleReconstructKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOne);
 		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOneInv);
 		_layerVisibleReconstructKernel.setArg(index++, layerSize);
