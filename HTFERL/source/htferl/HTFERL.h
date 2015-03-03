@@ -33,11 +33,12 @@ namespace htferl {
 			float _dutyCycleDecay;
 			float _alpha;
 			float _beta;
+			float _gamma;
 			float _traceDecay;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(4), _inhibitionRadius(2), _feedBackConnectionRadius(4),
-				_sparsity(0.05f), _dutyCycleDecay(0.01f), _alpha(0.1f), _beta(0.1f), _traceDecay(1.0f)
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(1), _inhibitionRadius(2), _feedBackConnectionRadius(4),
+				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f), _alpha(0.2f), _beta(0.2f), _gamma(0.001f), _traceDecay(1.0f)
 			{}
 		};
 
@@ -46,9 +47,12 @@ namespace htferl {
 			cl::Image2D _hiddenFeedForwardActivations;
 			cl::Image2D _hiddenFeedBackActivations;
 
-			cl::Image2D _hiddenStates;
-			cl::Image2D _hiddenStatesPrev;
-			cl::Image2D _hiddenStatesPrevPrev;
+			cl::Image2D _hiddenStatesFeedForward;
+			cl::Image2D _hiddenStatesFeedForwardPrev;
+
+			cl::Image2D _hiddenStatesFeedBack;
+			cl::Image2D _hiddenStatesFeedBackPrev;
+			cl::Image2D _hiddenStatesFeedBackPrevPrev;
 
 			cl::Image3D _feedForwardWeights;
 			cl::Image3D _feedForwardWeightsPrev;
@@ -93,6 +97,7 @@ namespace htferl {
 		float _prevValue;
 
 		cl::Image2D _inputImage;
+		cl::Image2D _inputImagePrev;
 
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
