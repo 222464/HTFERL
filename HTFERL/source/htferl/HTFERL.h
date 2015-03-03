@@ -82,6 +82,7 @@ namespace htferl {
 		cl::Kernel _layerHiddenInhibitKernel;
 		cl::Kernel _layerVisibleReconstructKernel;
 		cl::Kernel _layerHiddenWeightUpdateKernel;
+		cl::Kernel _layerHiddenWeightUpdateLastKernel;
 		cl::Kernel _layerVisibleWeightUpdateKernel;
 
 		std::vector<float> _input;

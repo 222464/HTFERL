@@ -237,6 +237,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_layerHiddenInhibitKernel = cl::Kernel(program.getProgram(), "layerHiddenInhibit");
 	_layerVisibleReconstructKernel = cl::Kernel(program.getProgram(), "layerVisibleReconstruct");
 	_layerHiddenWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdate");
+	_layerHiddenWeightUpdateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdateLast");
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
 }
 
@@ -318,10 +319,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		Float2 inputSizeMinusOneInv;
 		inputSizeMinusOneInv._x = 1.0f / (prevWidth - 1);
 		inputSizeMinusOneInv._y = 1.0f / (prevHeight - 1);
-
-		Int2 reverseReceptiveRadius;
-		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._width) / prevWidth * _layerDescs[l]._receptiveFieldRadius);
-		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._height) / prevHeight * _layerDescs[l]._receptiveFieldRadius);
 
 		Int2 receptiveFieldRadius;
 		receptiveFieldRadius._x = _layerDescs[l]._receptiveFieldRadius;
@@ -417,6 +414,20 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		receptiveFieldRadius._x = _layerDescs[l]._receptiveFieldRadius;
 		receptiveFieldRadius._y = _layerDescs[l]._receptiveFieldRadius;
 
+		Int2 nextSize;
+		Int2 nextSizeMinusOne;
+
+		if (l == _layers.size() - 1) {
+			nextSize._x = nextSize._y = 1;
+			nextSizeMinusOne._x = nextSizeMinusOne._y = 0;
+		}
+		else {
+			nextSize._x = _layerDescs[l + 1]._width;
+			nextSize._y = _layerDescs[l + 1]._height;
+			nextSizeMinusOne._x = _layerDescs[l + 1]._width - 1;
+			nextSizeMinusOne._y = _layerDescs[l + 1]._height - 1;
+		}
+
 		// -------------------------------- Activate --------------------------------
 
 		int index = 0;
@@ -441,8 +452,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, layerSize);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, layerSizeMinusOneInv);
-			_layerHiddenFeedBackActivateKernel.setArg(index++, inputSize);
-			_layerHiddenFeedBackActivateKernel.setArg(index++, inputSizeMinusOne);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, nextSize);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, nextSizeMinusOne);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenFeedBackActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
@@ -452,29 +463,60 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 		index = 0;
 
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
-		_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayer);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStates);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesPrev);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeights);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeights);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiases);
-		_layerHiddenWeightUpdateKernel.setArg(index++, layerSize);
-		_layerHiddenWeightUpdateKernel.setArg(index++, layerSizeMinusOneInv);
-		_layerHiddenWeightUpdateKernel.setArg(index++, inputSize);
-		_layerHiddenWeightUpdateKernel.setArg(index++, inputSizeMinusOne);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._sparsity);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._alpha);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._beta);
-		_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
+		if (l == _layers.size() - 1) {
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, *pPrevLayer);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesPrevPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._feedForwardWeights);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._lateralWeights);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenBiases);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, layerSize);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, layerSizeMinusOneInv);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, inputSize);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, inputSizeMinusOne);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._sparsity);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._alpha);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._beta);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._traceDecay);
 
-		cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+		}
+		else {
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayer);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesPrevPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l + 1]._hiddenStatesPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedBackWeightsPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeights);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeights);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiases);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedBackWeights);
+			_layerHiddenWeightUpdateKernel.setArg(index++, layerSize);
+			_layerHiddenWeightUpdateKernel.setArg(index++, layerSizeMinusOneInv);
+			_layerHiddenWeightUpdateKernel.setArg(index++, inputSize);
+			_layerHiddenWeightUpdateKernel.setArg(index++, inputSizeMinusOne);
+			_layerHiddenWeightUpdateKernel.setArg(index++, nextSize);
+			_layerHiddenWeightUpdateKernel.setArg(index++, nextSizeMinusOne);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._sparsity);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._alpha);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._beta);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
+
+			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+		}
 
 		index = 0;
 
