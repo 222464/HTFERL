@@ -46,7 +46,7 @@ namespace htferl {
 			LayerDesc()
 				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
 				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.1f), _feedForwardBeta(0.05f), _lateralAlpha(0.1f), _lateralBeta(0.05f),
+				_feedForwardAlpha(0.05f), _feedForwardBeta(0.05f), _lateralAlpha(0.05f), _lateralBeta(0.05f),
 				_gamma(0.005f), _temperature(1.0f), _lateralScalar(0.05f), _traceDecay(0.01f), _sdrDecay(0.01f),
 				_qWeight(1.0f)
 			{}

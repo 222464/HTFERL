@@ -197,7 +197,7 @@ void kernel layerHiddenInhibit(read_only image2d_t hiddenActivations, read_only 
 	
 	float2 prevDutyCycleAndTrace = read_imagef(hiddenStatesPrev, hiddenPosition).yz;
 	
-	float newState = numHigher < localActivity && thisActivation > 0.0f ? 1.0f : 0.0f;
+	float newState = numHigher < localActivity ? 1.0f : 0.0f;
 	
 	float newDutyCycle = (1.0f - dutyCycleDecay) * prevDutyCycleAndTrace.x + dutyCycleDecay * newState;
 	
@@ -234,7 +234,7 @@ void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only 
 
 	float bias = read_imagef(visibleBiases, visiblePosition).x;
 				
-	//sum += bias;
+	sum += bias;
 	
 	write_imagef(visibleReconstruction, visiblePosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
 }
