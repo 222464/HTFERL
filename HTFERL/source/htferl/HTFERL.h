@@ -56,6 +56,7 @@ namespace htferl {
 		struct Layer {
 			cl::Image2D _hiddenFeedForwardActivations;
 			cl::Image2D _hiddenFeedBackActivations;
+			cl::Image2D _hiddenFeedBackActivationsPrev;
 
 			cl::Image2D _hiddenStatesFeedForward;
 			cl::Image2D _hiddenStatesFeedForwardPrev;

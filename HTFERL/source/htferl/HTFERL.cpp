@@ -56,6 +56,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 
 		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenFeedBackActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenFeedBackActivationsPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
 		_layers[l]._hiddenStatesFeedForward = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenStatesFeedForwardPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
@@ -124,6 +125,20 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		initializeLayerVisibleKernel.setArg(index++, maxInitWeight);
 
 		cs.getQueue().enqueueNDRangeKernel(initializeLayerVisibleKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
+
+		{
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = _layerDescs[l]._width;
+			region[1] = _layerDescs[l]._height;
+			region[2] = 1;
+
+			cs.getQueue().enqueueCopyImage(_layers[l]._hiddenFeedBackActivations, _layers[l]._hiddenFeedBackActivationsPrev, origin, origin, region);
+		}
 
 		{
 			cl::size_t<3> origin;
@@ -630,6 +645,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, *pPrevLayer);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, *pPrevLayerFeedForwardPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenFeedBackActivationsPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrevPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
@@ -657,6 +673,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayer);
 			_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayerFeedForwardPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenFeedBackActivationsPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrevPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l + 1]._hiddenStatesFeedBackPrev);
@@ -702,7 +719,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerVisibleWeightUpdateKernel.setArg(index++, layerSize);
 		_layerVisibleWeightUpdateKernel.setArg(index++, layerSizeMinusOne);
 		_layerVisibleWeightUpdateKernel.setArg(index++, layerSizeMinusOneInv);
-		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedForwardAlpha);
+		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedForwardAlpha * learnAction);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedForwardBeta);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._temperature);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
