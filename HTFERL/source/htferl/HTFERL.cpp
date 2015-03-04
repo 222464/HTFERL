@@ -571,7 +571,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 	std::cout << qSum << " " << tdError << std::endl;
 
-	float learnAction = tdError > 0.0f ? 1.0f : 0.0f;
+	float learnAction = reward > 0.0f ? 1.0f : 0.0f;
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
@@ -774,9 +774,9 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 	for (int i = 0; i < _input.size(); i++)
 	if (_inputTypes[i] == _action) {
 		if (dist01(generator) < breakChance)
-			_input[i] = dist01(generator);
+			_input[i] = dist01(generator) > 0.5f ? 1.0f : 0.0f;
 		else
-			_input[i] = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
+			_input[i] = output[i] > 0.5f ? 1.0f : 0.0f;// std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
 	}
 	else
 		_input[i] = 0.0f;

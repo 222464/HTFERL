@@ -249,7 +249,7 @@ int main() {
 
 		//reward = dFitness * 5.0f;
 
-		reward = fitness;
+		reward = dFitness;
 
 		if (totalTime == 0.0f)
 			avgReward = reward;
