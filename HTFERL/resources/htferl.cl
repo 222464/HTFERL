@@ -240,9 +240,9 @@ void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only 
 }
 
 void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev, read_only image2d_t nextLayerHiddenStatesPrev,
-	read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev, read_only image3d_t feedBackWeightsPrev,
+	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev, read_only image3d_t feedBackWeightsPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases, write_only image3d_t feedBackWeights,
-	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
@@ -254,34 +254,45 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 	float2 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xy;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
+	float s = sigmoid(thisActivation);
+	
 	// --------------------------------- Collect Error -------------------------------------
 	
 	float sum = 0.0f;
-	
-	int wi = 0;
 	
 	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
 	for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
 		int2 inputPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
 		
 		if (inputPosition.x >= 0 && inputPosition.x < inputSize.x && inputPosition.y >= 0 && inputPosition.y < inputSize.y) {
-			float recon = read_imagef(visibleReconstruction, inputPosition).x;
-			float input = read_imagef(inputs, inputPosition).x;
-			
-			float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
-			
-			// For bias update
-			sum += (input - recon) * prevWeight.x;
-		}
+			// Next layer node's receptive field
+			int2 fieldCenter = (int2)(inputPosition.x * inputSizeMinusOneInv.x * layerSizeMinusOne.x, inputPosition.y * inputSizeMinusOneInv.y * layerSizeMinusOne.y);
+
+			int2 fieldLowerBounds = fieldCenter - reconstructionReceptiveRadius;
+			int2 fieldUpperBounds = fieldCenter + reconstructionReceptiveRadius;
 		
-		wi++;
+			// Check for containment
+			if (hiddenPosition.x >= fieldLowerBounds.x && hiddenPosition.x <= fieldUpperBounds.x && hiddenPosition.y >= fieldLowerBounds.y && hiddenPosition.y <= fieldUpperBounds.y) {	
+				int rdx = hiddenPosition.x - fieldCenter.x;
+				int rdy = hiddenPosition.y - fieldCenter.y;
+				
+				float input = read_imagef(inputs, inputPosition).x;
+				float recon = read_imagef(visibleReconstruction, inputPosition).x;
+				
+				int weightIndex = (reconstructionReceptiveRadius + rdy) + (reconstructionReceptiveRadius + rdx) * (reconstructionReceptiveRadius * 2 + 1);
+
+				float weight = read_imagef(reconstructionWeightsPrev, (int4)(inputPosition.x, inputPosition.y, weightIndex, 0)).x;
+				
+				sum += (input - recon) * weight;
+			}
+		}
 	}
 	
-	float error = sum * thisHiddenState.x * thisActivation * (1.0f - thisActivation);
+	float error = sum * thisHiddenState.x * s * (1.0f - s);
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
-	wi = 0;
+	int wi = 0;
 
 	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
 	for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
@@ -362,9 +373,9 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 }
 
 void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev,
-	read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev,
+	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases,
-	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
@@ -374,34 +385,45 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 	float2 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xy;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
+	float s = sigmoid(thisActivation);
+	
 	// --------------------------------- Collect Error -------------------------------------
 	
 	float sum = 0.0f;
-	
-	int wi = 0;
 	
 	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
 	for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
 		int2 inputPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
 		
 		if (inputPosition.x >= 0 && inputPosition.x < inputSize.x && inputPosition.y >= 0 && inputPosition.y < inputSize.y) {
-			float recon = read_imagef(visibleReconstruction, inputPosition).x;
-			float input = read_imagef(inputs, inputPosition).x;
-			
-			float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
-			
-			// For bias update
-			sum += (input - recon) * prevWeight.x;
-		}
+			// Next layer node's receptive field
+			int2 fieldCenter = (int2)(inputPosition.x * inputSizeMinusOneInv.x * layerSizeMinusOne.x, inputPosition.y * inputSizeMinusOneInv.y * layerSizeMinusOne.y);
+
+			int2 fieldLowerBounds = fieldCenter - reconstructionReceptiveRadius;
+			int2 fieldUpperBounds = fieldCenter + reconstructionReceptiveRadius;
 		
-		wi++;
+			// Check for containment
+			if (hiddenPosition.x >= fieldLowerBounds.x && hiddenPosition.x <= fieldUpperBounds.x && hiddenPosition.y >= fieldLowerBounds.y && hiddenPosition.y <= fieldUpperBounds.y) {	
+				int rdx = hiddenPosition.x - fieldCenter.x;
+				int rdy = hiddenPosition.y - fieldCenter.y;
+				
+				float input = read_imagef(inputs, inputPosition).x;
+				float recon = read_imagef(visibleReconstruction, inputPosition).x;
+				
+				int weightIndex = (reconstructionReceptiveRadius + rdy) + (reconstructionReceptiveRadius + rdx) * (reconstructionReceptiveRadius * 2 + 1);
+
+				float weight = read_imagef(reconstructionWeightsPrev, (int4)(inputPosition.x, inputPosition.y, weightIndex, 0)).x;
+				
+				sum += (input - recon) * weight;
+			}
+		}
 	}
 	
-	float error = sum * thisHiddenState.x * thisActivation * (1.0f - thisActivation);
+	float error = sum * thisHiddenState.x * s * (1.0f - s);
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
-	wi = 0;
+	int wi = 0;
 
 	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
 	for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
