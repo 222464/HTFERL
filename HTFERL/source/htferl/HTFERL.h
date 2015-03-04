@@ -36,14 +36,19 @@ namespace htferl {
 			float _feedForwardBeta;
 			float _lateralBeta;
 			float _gamma;
+			float _temperature;
 			float _lateralScalar;
 			float _traceDecay;
+			float _sdrDecay;
+
+			float _qWeight;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(3), _feedBackConnectionRadius(4),
-				_sparsity(1.01f / 49.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.4f), _feedForwardBeta(0.5f), _lateralAlpha(0.2f),  _lateralBeta(0.5f),
-				_gamma(0.005f), _lateralScalar(0.01f), _traceDecay(1.0f)
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
+				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
+				_feedForwardAlpha(0.05f), _feedForwardBeta(0.05f), _lateralAlpha(0.025f), _lateralBeta(0.05f),
+				_gamma(0.005f), _temperature(1.0f), _lateralScalar(0.01f), _traceDecay(0.01f), _sdrDecay(0.01f),
+				_qWeight(1.0f)
 			{}
 		};
 
@@ -96,6 +101,7 @@ namespace htferl {
 		cl::Kernel _layerHiddenWeightUpdateKernel;
 		cl::Kernel _layerHiddenWeightUpdateLastKernel;
 		cl::Kernel _layerVisibleWeightUpdateKernel;
+		cl::Kernel _layerUpdateQKernel;
 
 		std::vector<float> _input;
 

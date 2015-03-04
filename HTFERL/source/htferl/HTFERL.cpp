@@ -57,12 +57,12 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenFeedBackActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
-		_layers[l]._hiddenStatesFeedForward = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
-		_layers[l]._hiddenStatesFeedForwardPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenStatesFeedForward = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenStatesFeedForwardPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
-		_layers[l]._hiddenStatesFeedBack = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
-		_layers[l]._hiddenStatesFeedBackPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
-		_layers[l]._hiddenStatesFeedBackPrevPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenStatesFeedBack = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenStatesFeedBackPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenStatesFeedBackPrevPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RGBA, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
 		_layers[l]._feedForwardWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
 		_layers[l]._feedForwardWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
@@ -265,6 +265,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_layerHiddenWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdate");
 	_layerHiddenWeightUpdateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdateLast");
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
+	_layerUpdateQKernel = cl::Kernel(program.getProgram(), "layerUpdateQ");
 }
 
 void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator) {
@@ -294,6 +295,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		std::swap(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev);
 		std::swap(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev);
 		std::swap(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev);
+		std::swap(_layers[l]._qValues, _layers[l]._qValuesPrev);
 	}
 		
 	std::swap(_inputImage, _inputImagePrev);
@@ -384,6 +386,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._inhibitionRadius);
 		_layerHiddenInhibitKernel.setArg(index++, localActivity);
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
+		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._sdrDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
@@ -494,9 +497,66 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._inhibitionRadius);
 		_layerHiddenInhibitKernel.setArg(index++, localActivity);
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
+		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._sdrDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 	}
+
+	// ------------------------------------------------------------------------------
+	// ----------------------------- Q Value Updates  -------------------------------
+	// ------------------------------------------------------------------------------
+
+	float qSum = 0.0f;
+
+	for (int l = 0; l < _layers.size(); l++) {
+		cl::size_t<3> origin;
+		origin[0] = 0;
+		origin[1] = 0;
+		origin[2] = 0;
+
+		cl::size_t<3> region;
+		region[0] = _layerDescs[l]._width;
+		region[1] = _layerDescs[l]._height;
+		region[2] = 1;
+
+		std::vector<float> qValues(_layerDescs[l]._width * _layerDescs[l]._height);
+
+		cs.getQueue().enqueueReadImage(_layers[l]._qValuesPrev, CL_TRUE, origin, region, 0, 0, qValues.data());
+
+		std::vector<float> states(_layerDescs[l]._width * _layerDescs[l]._height * 4);
+
+		cs.getQueue().enqueueReadImage(_layers[l]._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, states.data());
+
+		float subSum = 0.0f;
+		float subDiv = 0.0f;
+
+		for (int i = 0; i < qValues.size(); i++) {
+			float state = states[i * 4];
+			subSum += qValues[i] * state;
+			subDiv += state;
+		}
+
+		qSum += _layerDescs[l]._qWeight * subSum / std::max<float>(0.00001f, subDiv);
+	}
+
+	qSum /= _layers.size();
+
+	float tdError = alpha * (reward + gamma * qSum - _prevValue);
+
+	_prevValue = qSum;
+
+	for (int l = 0; l < _layers.size(); l++) {
+		_layerUpdateQKernel.setArg(0, _layers[l]._hiddenStatesFeedBackPrev);
+		_layerUpdateQKernel.setArg(1, _layers[l]._qValuesPrev);
+		_layerUpdateQKernel.setArg(2, _layers[l]._qValues);
+		_layerUpdateQKernel.setArg(3, _layerDescs[l]._qWeight * tdError);
+
+		cs.getQueue().enqueueNDRangeKernel(_layerUpdateQKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+	}
+
+	std::cout << qSum << " " << tdError << std::endl;
+
+	float learnAction = tdError > 0.0f ? 1.0f : 0.0f;
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
@@ -557,8 +617,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		// ------------------------------- Weight Updates -------------------------------
 
 		Float2 alphas;
-		alphas._x = _layerDescs[l]._feedForwardAlpha;
-		alphas._y = _layerDescs[l]._lateralAlpha;
+		alphas._x = _layerDescs[l]._feedForwardAlpha * learnAction;
+		alphas._y = _layerDescs[l]._lateralAlpha * learnAction;
 
 		Float2 betas;
 		betas._x = _layerDescs[l]._feedForwardBeta;
@@ -588,6 +648,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, alphas);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, betas);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._gamma);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._temperature);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._traceDecay);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
@@ -620,6 +681,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 			_layerHiddenWeightUpdateKernel.setArg(index++, alphas);
 			_layerHiddenWeightUpdateKernel.setArg(index++, betas);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._gamma);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._temperature);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
@@ -642,6 +704,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerVisibleWeightUpdateKernel.setArg(index++, layerSizeMinusOneInv);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedForwardAlpha);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedForwardBeta);
+		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._temperature);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._traceDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerVisibleWeightUpdateKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
@@ -716,7 +779,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
 
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
-		std::vector<float> state(_inputWidth * _inputHeight * 2);
+		std::vector<float> state(_inputWidth * _inputHeight * 4);
 
 		cl::size_t<3> origin;
 		origin[0] = 0;
@@ -746,7 +809,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 			color = c;
 
-			color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
+			color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[4 * (x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
 
 			image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
 		}
