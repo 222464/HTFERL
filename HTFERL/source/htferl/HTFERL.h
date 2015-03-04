@@ -31,14 +31,19 @@ namespace htferl {
 			float _sparsity;
 
 			float _dutyCycleDecay;
-			float _alpha;
-			float _beta;
+			float _feedForwardAlpha;
+			float _lateralAlpha;
+			float _feedForwardBeta;
+			float _lateralBeta;
 			float _gamma;
+			float _lateralScalar;
 			float _traceDecay;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(1), _inhibitionRadius(2), _feedBackConnectionRadius(4),
-				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f), _alpha(0.2f), _beta(0.2f), _gamma(0.001f), _traceDecay(1.0f)
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(3), _feedBackConnectionRadius(4),
+				_sparsity(1.01f / 49.0f), _dutyCycleDecay(0.01f),
+				_feedForwardAlpha(0.4f), _feedForwardBeta(0.5f), _lateralAlpha(0.2f),  _lateralBeta(0.5f),
+				_gamma(0.005f), _lateralScalar(0.01f), _traceDecay(1.0f)
 			{}
 		};
 
@@ -74,6 +79,9 @@ namespace htferl {
 
 			cl::Image2D _visibleReconstruction;
 			cl::Image2D _visibleReconstructionPrev;
+
+			cl::Image2D _qValues;
+			cl::Image2D _qValuesPrev;
 		};
 
 		int _inputWidth, _inputHeight;
