@@ -249,7 +249,7 @@ int main() {
 
 		//reward = dFitness * 5.0f;
 
-		reward = dFitness;
+		reward = fitness;
 
 		if (totalTime == 0.0f)
 			avgReward = reward;
@@ -279,7 +279,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward, 0.5f, 0.992f, 0.2f, 0.1f, generator);
+		agent.step(cs, reward, 0.01f, 0.992f, 0.2f, 0.1f, generator);
 
 		float output = 0.0f;
 		int c = 0;

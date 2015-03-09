@@ -54,7 +54,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		int numLateralWeights = std::pow(_layerDescs[l]._lateralConnectionRadius * 2 + 1, 2);
 		int numFeedBackWeights = std::pow(_layerDescs[l]._feedBackConnectionRadius * 2 + 1, 2);
 
-		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		
 		_layers[l]._hiddenFeedBackActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenFeedBackActivationsPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
@@ -544,15 +544,15 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		cs.getQueue().enqueueReadImage(_layers[l]._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, states.data());
 
 		float subSum = 0.0f;
-		float subDiv = 0.0f;
+		//float subDiv = 0.0f;
 
 		for (int i = 0; i < qValues.size(); i++) {
-			float state = states[i * 4];
-			subSum += qValues[i] * state;
-			subDiv += state;
+			//float state = states[i * 4];
+			subSum += qValues[i] * states[i * 4];
+			//subDiv += state;
 		}
 
-		qSum += _layerDescs[l]._qWeight * subSum / std::max<float>(0.00001f, subDiv);
+		qSum += _layerDescs[l]._qWeight * subSum;// / std::max<float>(0.00001f, subDiv);
 	}
 
 	qSum /= _layers.size();
@@ -572,7 +572,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 	std::cout << qSum << " " << tdError << std::endl;
 
-	float learnAction = reward > 0.0f ? 1.0f : 0.0f;
+	float learnAction = tdError > 0.0f ? 1.0f : 0.0f;
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
@@ -752,7 +752,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 		cs.getQueue().enqueueNDRangeKernel(_layerVisibleReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 
-		pPrevLayer = &_layers[l]._hiddenStatesFeedBack;
+		pPrevLayer = &_layers[l]._hiddenStatesFeedBack; // Or _hiddenStatesFeedBack ?
 		prevWidth = _layerDescs[l]._width;
 		prevHeight = _layerDescs[l]._height;
 
@@ -783,9 +783,9 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 	for (int i = 0; i < _input.size(); i++)
 	if (_inputTypes[i] == _action) {
 		if (dist01(generator) < breakChance)
-			_input[i] = dist01(generator) > 0.5f ? 1.0f : 0.0f;
+			_input[i] = dist01(generator);
 		else
-			_input[i] = output[i] > 0.5f ? 1.0f : 0.0f;// std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
+			_input[i] = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
 	}
 	else
 		_input[i] = 0.0f;
