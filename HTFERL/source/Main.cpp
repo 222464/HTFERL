@@ -182,6 +182,16 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}
 
+	for (int i = 0; i < 6; i++) {
+		int x = actionXDist(generator);
+		int y = actionYDist(generator);
+
+		if (inputTypes[x + y * 64] == htferl::HTFERL::_action)
+			continue;
+
+		inputTypes[x + y * 64] = htferl::HTFERL::_q;
+	}
+
 	agent.createRandom(cs, program, 64, 64, layerDescs, inputTypes, -0.05f, 0.05f, generator);
 
 	sf::RenderTexture htmRT;
@@ -279,7 +289,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward, 0.01f, 0.992f, 0.2f, 0.1f, generator);
+		agent.step(cs, reward, 0.05f, 0.9f, 0.992f, 0.2f, 0.1f, generator);
 
 		float output = 0.0f;
 		int c = 0;

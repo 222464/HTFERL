@@ -43,7 +43,6 @@ void kernel initializeLayerHidden(write_only image2d_t hiddenFeedForwardActivati
 	write_only image3d_t feedForwardWeights,
 	write_only image2d_t hiddenBiases,
 	write_only image3d_t lateralWeights,
-	write_only image2d_t qValues,
 	int feedForwardSize, int lateralSize,
 	uint2 seed, float sparsity, float minWeight, float maxWeight)
 {
@@ -54,8 +53,7 @@ void kernel initializeLayerHidden(write_only image2d_t hiddenFeedForwardActivati
 	write_imagef(hiddenFeedForwardActivations, hiddenPosition, (float4)(0.0f, 0.0f, 0.0f, 0.0f));
 	write_imagef(hiddenFeedBackActivations, hiddenPosition, (float4)(0.0f, 0.0f, 0.0f, 0.0f));
 	write_imagef(hiddenStates, hiddenPosition, (float4)(0.0f, sparsity, 0.0f, 0.0f));
-	write_imagef(qValues, hiddenPosition, (float4)(0.0f, 0.0f, 0.0f, 0.0f));
-	
+
 	float hiddenBias = randFloat(&seedValue) * (maxWeight - minWeight) + minWeight;
 	float hiddenVisibleBias = randFloat(&seedValue) * (maxWeight - minWeight) + minWeight;
 	
@@ -251,7 +249,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 	float2 nextCenterPosition = (float2)(inputCenterPositionNormalized.x * nextSizeMinusOne.x, inputCenterPositionNormalized.y * nextSizeMinusOne.y);
 
-	float2 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xy;
+	float3 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xyz;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
 	// --------------------------------- Collect Error -------------------------------------
@@ -286,7 +284,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		}
 	}
 	
-	float error = thisHiddenState.x * (1.0f - thisHiddenState).x * sum;
+	float error = thisHiddenState.z * (1.0f - thisHiddenState).z * sum;
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
@@ -320,7 +318,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
 		
 		if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
-			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).x;
+			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).z;
 			
 			float eligibility = error * input;
 	
@@ -343,7 +341,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		int2 nextPosition = (int2)(nextCenterPosition.x + dx, nextCenterPosition.y + dy);
 		
 		if (nextPosition.x >= 0 && nextPosition.x < nextSize.x && nextPosition.y >= 0 && nextPosition.y < nextSize.y) {
-			float next = read_imagef(nextLayerHiddenStatesPrev, nextPosition).x;
+			float next = read_imagef(nextLayerHiddenStatesPrev, nextPosition).z;
 	
 			float eligibility = error * next;
 	
@@ -380,7 +378,7 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
 	float2 inputCenterPosition = (float2)(inputCenterPositionNormalized.x * inputSizeMinusOne.x, inputCenterPositionNormalized.y * inputSizeMinusOne.y);
 
-	float2 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xy;
+	float3 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xyz;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
 	// --------------------------------- Collect Error -------------------------------------
@@ -415,7 +413,7 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 		}
 	}
 	
-	float error = thisHiddenState.x * (1.0f - thisHiddenState).x * sum;
+	float error = thisHiddenState.z * (1.0f - thisHiddenState).z * sum;
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
@@ -449,7 +447,7 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 		int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
 		
 		if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
-			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).x;
+			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).z;
 			
 			float eligibility = error * input;
 	

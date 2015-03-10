@@ -16,7 +16,7 @@ namespace htferl {
 	class HTFERL {
 	public:
 		enum InputType {
-			_state, _action
+			_state, _action, _q
 		};
 
 		struct LayerDesc {
@@ -46,9 +46,8 @@ namespace htferl {
 			LayerDesc()
 				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
 				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.1f), _feedForwardBeta(0.1f), _lateralAlpha(0.05f), _lateralBeta(0.1f),
-				_gamma(0.0f), _temperature(1.0f), _lateralScalar(0.2f), _traceDecay(0.01f), _sdrDecay(0.01f),
-				_qWeight(1.0f)
+				_feedForwardAlpha(0.5f), _feedForwardBeta(0.5f), _lateralAlpha(0.25f), _lateralBeta(0.5f),
+				_gamma(0.0f), _temperature(1.0f), _lateralScalar(0.4f), _traceDecay(1.0f), _sdrDecay(0.01f)
 			{}
 		};
 
@@ -85,9 +84,6 @@ namespace htferl {
 
 			cl::Image2D _visibleReconstruction;
 			cl::Image2D _visibleReconstructionPrev;
-
-			cl::Image2D _qValues;
-			cl::Image2D _qValuesPrev;
 		};
 
 		int _inputWidth, _inputHeight;
@@ -105,6 +101,7 @@ namespace htferl {
 		cl::Kernel _layerUpdateQKernel;
 
 		std::vector<float> _input;
+		std::vector<float> _prevMaxInput;
 
 		std::vector<InputType> _inputTypes;
 
@@ -114,10 +111,12 @@ namespace htferl {
 		cl::Image2D _inputImage;
 		cl::Image2D _inputImagePrev;
 
+		cl::Image2D _learnImage;
+
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
-		void step(sys::ComputeSystem &cs, float reward, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator);
+		void step(sys::ComputeSystem &cs, float reward, float minLearn, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator);
 
 		int getInputWidth() const {
 			return _inputWidth;

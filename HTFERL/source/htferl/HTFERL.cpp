@@ -32,18 +32,24 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_input.clear();
 	_input.resize(_inputWidth * _inputHeight);
 
+	_prevMaxInput.clear();
+	_prevMaxInput.resize(_inputWidth * _inputHeight);
+
 	// Initialize action portions randomly
 	for (int i = 0; i < _input.size(); i++)
 		if (_inputTypes[i] == _action) {
 			float value = actionDist(generator);
 
 			_input[i] = value;
+			_prevMaxInput[i] = value;
 		}
 		else
-			_input[i] = 0.0f;
+			_input[i] = _prevMaxInput[i] = 0.0f;
 
 	_inputImage = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _inputWidth, _inputHeight);
 	_inputImagePrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _inputWidth, _inputHeight);
+
+	_learnImage = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _inputWidth, _inputHeight);
 
 	int prevWidth = _inputWidth;
 	int prevHeight = _inputHeight;
@@ -87,9 +93,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		_layers[l]._visibleReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 		_layers[l]._visibleReconstructionPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 
-		_layers[l]._qValues = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
-		_layers[l]._qValuesPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
-
 		// Initialize
 		Uint2 initSeedHidden;
 		initSeedHidden._x = seedDist(generator);
@@ -103,7 +106,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._feedForwardWeights);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenBiases);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._lateralWeights);
-		initializeLayerHiddenKernel.setArg(index++, _layers[l]._qValues);
 		initializeLayerHiddenKernel.setArg(index++, numFeedForwardWeights);
 		initializeLayerHiddenKernel.setArg(index++, numLateralWeights);
 		initializeLayerHiddenKernel.setArg(index++, initSeedHidden);
@@ -256,20 +258,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			cs.getQueue().enqueueCopyImage(_layers[l]._reconstructionWeights, _layers[l]._reconstructionWeightsPrev, origin, origin, region);
 		}
 
-		{
-			cl::size_t<3> origin;
-			origin[0] = 0;
-			origin[1] = 0;
-			origin[2] = 0;
-
-			cl::size_t<3> region;
-			region[0] = _layerDescs[l]._width;
-			region[1] = _layerDescs[l]._height;
-			region[2] = 1;
-
-			cs.getQueue().enqueueCopyImage(_layers[l]._qValues, _layers[l]._qValuesPrev, origin, origin, region);
-		}
-
 		prevWidth = _layerDescs[l]._width;
 		prevHeight = _layerDescs[l]._height;
 	}
@@ -281,10 +269,9 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_layerHiddenWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdate");
 	_layerHiddenWeightUpdateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdateLast");
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
-	_layerUpdateQKernel = cl::Kernel(program.getProgram(), "layerUpdateQ");
 }
 
-void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator) {
+void HTFERL::step(sys::ComputeSystem &cs, float reward, float minLearn, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator) {
 	struct Float2 {
 		float _x, _y;
 	};
@@ -311,7 +298,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		std::swap(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev);
 		std::swap(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev);
 		std::swap(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev);
-		std::swap(_layers[l]._qValues, _layers[l]._qValuesPrev);
 	}
 		
 	std::swap(_inputImage, _inputImagePrev);
@@ -516,69 +502,129 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._sdrDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+
+		// --------------------- Make Predictions (Reconstruction) ---------------------
+
+		index = 0;
+
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._hiddenStatesFeedBack);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
+		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleReconstruction);
+		_layerVisibleReconstructKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
+		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOne);
+		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOneInv);
+		_layerVisibleReconstructKernel.setArg(index++, layerSize);
+		_layerVisibleReconstructKernel.setArg(index++, layerSizeMinusOne);
+		_layerVisibleReconstructKernel.setArg(index++, layerSizeMinusOneInv);
+
+		cs.getQueue().enqueueNDRangeKernel(_layerVisibleReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 	}
 
 	// ------------------------------------------------------------------------------
 	// ----------------------------- Q Value Updates  -------------------------------
 	// ------------------------------------------------------------------------------
 
-	float qSum = 0.0f;
+	// Exploratory action
+	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+	std::normal_distribution<float> pertDist(0.0f, perturbationStdDev);
 
-	for (int l = 0; l < _layers.size(); l++) {
+	std::vector<float> output(_input.size());
+
+	{
 		cl::size_t<3> origin;
 		origin[0] = 0;
 		origin[1] = 0;
 		origin[2] = 0;
 
 		cl::size_t<3> region;
-		region[0] = _layerDescs[l]._width;
-		region[1] = _layerDescs[l]._height;
+		region[0] = _inputWidth;
+		region[1] = _inputHeight;
 		region[2] = 1;
 
-		std::vector<float> qValues(_layerDescs[l]._width * _layerDescs[l]._height);
+		cs.getQueue().enqueueReadImage(_layers.front()._visibleReconstruction, CL_TRUE, origin, region, 0, 0, output.data());
+	}
 
-		cs.getQueue().enqueueReadImage(_layers[l]._qValuesPrev, CL_TRUE, origin, region, 0, 0, qValues.data());
+	float nextQ = 0.0f;
+	float qDiv = 0.0f;
 
-		std::vector<float> states(_layerDescs[l]._width * _layerDescs[l]._height * 4);
+	std::vector<float> newInput(_input.size());
 
-		cs.getQueue().enqueueReadImage(_layers[l]._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, states.data());
+	for (int i = 0; i < _input.size(); i++)
+		if (_inputTypes[i] == _action) {
+			if (dist01(generator) < breakChance)
+				newInput[i] = dist01(generator);
+			else
+				newInput[i] = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
+		}
+		else if (_inputTypes[i] == _q) {
+			newInput[i] = output[i];
 
-		float subSum = 0.0f;
-		//float subDiv = 0.0f;
+			nextQ += output[i];
 
-		for (int i = 0; i < qValues.size(); i++) {
-			//float state = states[i * 4];
-			subSum += qValues[i] * states[i * 4];
-			//subDiv += state;
+			qDiv++;
 		}
 
-		qSum += _layerDescs[l]._qWeight * subSum;// / std::max<float>(0.00001f, subDiv);
+	nextQ /= qDiv;
+
+	float tdError = reward + gamma * nextQ - _prevValue;
+
+	float newQ = _prevValue + alpha * tdError;
+
+	_prevValue = nextQ;
+
+	std::vector<float> learnData(_input.size());
+
+	if (tdError > 0.0f) {
+		for (int i = 0; i < learnData.size(); i++)
+			if (_inputTypes[i] == _action) {
+				learnData[i] = _input[i];
+			}
+			else if (_inputTypes[i] == _q) {
+				_input[i] = nextQ;
+				learnData[i] = newQ;
+			}
+			else
+				learnData[i] = _input[i];
+	}
+	else {
+		for (int i = 0; i < learnData.size(); i++)
+			if (_inputTypes[i] == _action) {
+				learnData[i] = _prevMaxInput[i];
+			}
+			else if (_inputTypes[i] == _q) {
+				_input[i] = nextQ;
+				learnData[i] = newQ;
+			}
+			else
+				learnData[i] = _input[i];
 	}
 
-	qSum /= _layers.size();
+	_input = newInput;
 
-	float tdError = alpha * (reward + gamma * qSum - _prevValue);
+	std::cout << nextQ << " " << tdError << std::endl;
 
-	_prevValue = qSum;
+	float learnAction = 1.0f;
 
-	for (int l = 0; l < _layers.size(); l++) {
-		_layerUpdateQKernel.setArg(0, _layers[l]._hiddenStatesFeedBackPrev);
-		_layerUpdateQKernel.setArg(1, _layers[l]._qValuesPrev);
-		_layerUpdateQKernel.setArg(2, _layers[l]._qValues);
-		_layerUpdateQKernel.setArg(3, _layerDescs[l]._qWeight * tdError);
+	{
+		cl::size_t<3> origin;
+		origin[0] = 0;
+		origin[1] = 0;
+		origin[2] = 0;
 
-		cs.getQueue().enqueueNDRangeKernel(_layerUpdateQKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+		cl::size_t<3> region;
+		region[0] = _inputWidth;
+		region[1] = _inputHeight;
+		region[2] = 1;
+
+		cs.getQueue().enqueueWriteImage(_learnImage, CL_TRUE, origin, region, 0, 0, learnData.data());
 	}
-
-	std::cout << qSum << " " << tdError << std::endl;
-
-	float learnAction = tdError > 0.0f ? 1.0f : 0.0f;
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
 	// ------------------------------------------------------------------------------
 
-	pPrevLayer = &_inputImage;
+	pPrevLayer = &_learnImage;
 	prevWidth = _inputWidth;
 	prevHeight = _inputHeight;
 
@@ -735,23 +781,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 
 		cs.getQueue().enqueueNDRangeKernel(_layerVisibleWeightUpdateKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 
-		// --------------------- Make Predictions (Reconstruction) ---------------------
-
-		index = 0;
-
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._hiddenStatesFeedBack);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._reconstructionWeights);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiases);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleReconstruction);
-		_layerVisibleReconstructKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
-		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOne);
-		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOneInv);
-		_layerVisibleReconstructKernel.setArg(index++, layerSize);
-		_layerVisibleReconstructKernel.setArg(index++, layerSizeMinusOne);
-		_layerVisibleReconstructKernel.setArg(index++, layerSizeMinusOneInv);
-
-		cs.getQueue().enqueueNDRangeKernel(_layerVisibleReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
-
 		pPrevLayer = &_layers[l]._hiddenStatesFeedBack; // Or _hiddenStatesFeedBack ?
 		prevWidth = _layerDescs[l]._width;
 		prevHeight = _layerDescs[l]._height;
@@ -760,35 +789,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float alpha, float gamma
 		pPrevLayerFeedBackPrev = &_layers[l]._hiddenStatesFeedBackPrev;
 	}
 
-	// Exploratory action
-	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
-	std::normal_distribution<float> pertDist(0.0f, perturbationStdDev);
-
-	std::vector<float> output(_input.size());
-
-	{
-		cl::size_t<3> origin;
-		origin[0] = 0;
-		origin[1] = 0;
-		origin[2] = 0;
-
-		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
-		region[2] = 1;
-
-		cs.getQueue().enqueueReadImage(_layers.front()._visibleReconstruction, CL_TRUE, origin, region, 0, 0, output.data());
-	}
-
-	for (int i = 0; i < _input.size(); i++)
-	if (_inputTypes[i] == _action) {
-		if (dist01(generator) < breakChance)
-			_input[i] = dist01(generator);
-		else
-			_input[i] = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, output[i])) + pertDist(generator)));
-	}
-	else
-		_input[i] = 0.0f;
+	_prevMaxInput = output;
 }
 
 void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr<sf::Image>> &images, unsigned long seed) const {
