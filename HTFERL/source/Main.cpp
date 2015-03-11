@@ -289,13 +289,13 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward, 0.05f, 0.9f, 0.992f, 0.2f, 0.1f, generator);
+		agent.step(cs, reward, 0.8f, 0.992f, 0.1f, 0.1f, 0.02f, 0.02f, 0.05f, 0.01f, 1.0f, generator);
 
 		float output = 0.0f;
 		int c = 0;
 
 		for (int i = 0; i < actionIndices.size(); i++) {
-			output += agent.getOutput(actionIndices[i]);
+			output += agent.getOutput(i);
 			c++;
 		}
 

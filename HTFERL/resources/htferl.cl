@@ -174,7 +174,7 @@ void kernel layerHiddenFeedBackActivate(read_only image2d_t hiddenFeedForwardAct
 }
 
 void kernel layerHiddenInhibit(read_only image2d_t hiddenActivations, read_only image2d_t hiddenStatesPrev, write_only image2d_t hiddenStates,
-	int2 layerSize, int inhibitionRadius, float localActivity, float dutyCycleDecay, float sdrDecay)
+	int2 layerSize, int inhibitionRadius, float localActivity, float dutyCycleDecay)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
@@ -193,15 +193,13 @@ void kernel layerHiddenInhibit(read_only image2d_t hiddenActivations, read_only 
 		}
 	}
 	
-	float2 prevDutyCycleAndTrace = read_imagef(hiddenStatesPrev, hiddenPosition).yz;
+	float prevDutyCycleAndTrace = read_imagef(hiddenStatesPrev, hiddenPosition).y;
 	
 	float newState = numHigher < localActivity ? thisActivation : 0.0f;
 	
-	float newDutyCycle = (1.0f - dutyCycleDecay) * prevDutyCycleAndTrace.x + dutyCycleDecay * newState;
+	float newDutyCycle = (1.0f - dutyCycleDecay) * prevDutyCycleAndTrace + dutyCycleDecay * newState;
 	
-	float newTrace = fmax((1.0f - sdrDecay) * prevDutyCycleAndTrace.y, newState);
-	
-	write_imagef(hiddenStates, hiddenPosition, (float4)(newState, newDutyCycle, newTrace, 0.0f));
+	write_imagef(hiddenStates, hiddenPosition, (float4)(newState, newDutyCycle, 0.0f, 0.0f));
 }
 
 void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only image3d_t reconstructionWeights, read_only image2d_t visibleBiases, write_only image2d_t visibleReconstruction,
@@ -240,7 +238,7 @@ void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only 
 void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev, read_only image2d_t nextLayerHiddenStatesPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev, read_only image3d_t feedBackWeightsPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases, write_only image3d_t feedBackWeights,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float gamma) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
@@ -249,7 +247,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 	float2 nextCenterPosition = (float2)(inputCenterPositionNormalized.x * nextSizeMinusOne.x, inputCenterPositionNormalized.y * nextSizeMinusOne.y);
 
-	float3 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xyz;
+	float thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).x;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
 	// --------------------------------- Collect Error -------------------------------------
@@ -284,7 +282,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		}
 	}
 	
-	float error = thisHiddenState.z * (1.0f - thisHiddenState).z * sum;
+	float error = thisHiddenState * (1.0f - thisHiddenState) * sum;
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
@@ -299,13 +297,11 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 			
 			float eligibility = error * input;
 	
-			float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+			float prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta.x * exp(-fabs(prevWeight.y) * temperature) * eligibility;
-					
-			float2 newWeight = (float2)(prevWeight.x + alpha.x * newTrace, newTrace);
+			float newWeight = prevWeight + alpha.x * eligibility;
 			
-			write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -318,17 +314,15 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
 		
 		if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
-			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).z;
+			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).x;
 			
 			float eligibility = error * input;
 	
-			float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
-			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta.y * exp(-fabs(prevWeight.y) * temperature) * eligibility;
+			float prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 					
-			float2 newWeight = (float2)(prevWeight.x + alpha.y * newTrace, newTrace);
+			float newWeight = prevWeight + alpha.y * eligibility;
 			
-			write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -341,17 +335,15 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 		int2 nextPosition = (int2)(nextCenterPosition.x + dx, nextCenterPosition.y + dy);
 		
 		if (nextPosition.x >= 0 && nextPosition.x < nextSize.x && nextPosition.y >= 0 && nextPosition.y < nextSize.y) {
-			float next = read_imagef(nextLayerHiddenStatesPrev, nextPosition).z;
+			float next = read_imagef(nextLayerHiddenStatesPrev, nextPosition).x;
 	
 			float eligibility = error * next;
 	
-			float2 prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+			float prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta.x * exp(-fabs(prevWeight.y) * temperature) * eligibility;
-					
-			float2 newWeight = (float2)(prevWeight.x + alpha.x * newTrace, newTrace);
+			float newWeight = prevWeight + alpha.x * eligibility;
 			
-			write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -359,26 +351,24 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 	
 	float eligibility = error;
 	
-	float2 prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).xy;
+	float prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).x;
 		
-	float newTrace = (1.0f - traceDecay) * prevBias.y + beta.x * exp(-fabs(prevBias.y) * temperature) * eligibility;
-		
-	float2 newBias = (float2)(prevBias.x + alpha.x * newTrace + (sparsity - thisHiddenState.y) * gamma, newTrace);
+	float newBias = prevBias + alpha.x * eligibility;// + (sparsity - thisHiddenState.y) * gamma;
 	
-	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias.x, newBias.y, 0.0f, 0.0f));
+	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float2 beta, float gamma, float temperature, float traceDecay) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float gamma) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
 	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
 	float2 inputCenterPosition = (float2)(inputCenterPositionNormalized.x * inputSizeMinusOne.x, inputCenterPositionNormalized.y * inputSizeMinusOne.y);
 
-	float3 thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).xyz;
+	float thisHiddenState = read_imagef(hiddenStatesPrev, hiddenPosition).x;
 	float thisActivation = read_imagef(feedBackActivationsPrev, hiddenPosition).x;
 
 	// --------------------------------- Collect Error -------------------------------------
@@ -413,7 +403,7 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 		}
 	}
 	
-	float error = thisHiddenState.z * (1.0f - thisHiddenState).z * sum;
+	float error = thisHiddenState * (1.0f - thisHiddenState) * sum;
 	
 	// --------------------------------- Update on Error ---------------------------------
 	
@@ -428,13 +418,11 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 			
 			float eligibility = error * input;
 	
-			float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+			float prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta.x * exp(-fabs(prevWeight.y) * temperature) * eligibility;
-					
-			float2 newWeight = (float2)(prevWeight.x + alpha.x * newTrace, newTrace);
+			float newWeight = prevWeight + alpha.x * eligibility;
 			
-			write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -447,17 +435,15 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 		int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
 		
 		if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
-			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).z;
+			float input = read_imagef(hiddenStatesPrevPrev, layerPosition).x;
 			
 			float eligibility = error * input;
 	
-			float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+			float prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta.y * exp(-fabs(prevWeight.y) * temperature) * eligibility;
-					
-			float2 newWeight = (float2)(prevWeight.x + alpha.y * newTrace, newTrace);
+			float newWeight = prevWeight + alpha.y * eligibility;
 			
-			write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -465,17 +451,15 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 	
 	float eligibility = error;
 	
-	float2 prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).xy;
+	float prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).x;
 		
-	float newTrace = (1.0f - traceDecay) * prevBias.y + beta.x * exp(-fabs(prevBias.y) * temperature) * eligibility;
-		
-	float2 newBias = (float2)(prevBias.x + alpha.x * newTrace + (sparsity - thisHiddenState.y) * gamma, newTrace);
+	float newBias = prevBias + alpha.x * eligibility;// + (sparsity - thisHiddenState.y) * gamma;
 	
-	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias.x, newBias.y, 0.0f, 0.0f));
+	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t hiddenStates, read_only image3d_t reconstructionWeightsPrev, read_only image2d_t visibleBiasesPrev, write_only image3d_t reconstructionWeights, write_only image2d_t visibleBiases,
-	int reconstructionReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, float alpha, float beta, float temperature, float traceDecay)
+	int reconstructionReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, float alpha)
 {
 	int2 visiblePosition = (int2)(get_global_id(0), get_global_id(1));
 	float2 layerPositionNormalized = (float2)(visiblePosition.x * inputSizeMinusOneInv.x, visiblePosition.y * inputSizeMinusOneInv.y);
@@ -497,13 +481,11 @@ void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, 
 
 			float eligibility = error * source;
 	
-			float2 prevWeight = read_imagef(reconstructionWeightsPrev, (int4)(visiblePosition.x, visiblePosition.y, wi, 0)).xy;
+			float prevWeight = read_imagef(reconstructionWeightsPrev, (int4)(visiblePosition.x, visiblePosition.y, wi, 0)).x;
 			
-			float newTrace = (1.0f - traceDecay) * prevWeight.y + beta * exp(-fabs(prevWeight.y) * temperature) * eligibility;
-					
-			float2 newWeight = (float2)(prevWeight.x + alpha * newTrace, newTrace);
+			float newWeight = prevWeight + alpha * eligibility;
 			
-			write_imagef(reconstructionWeights, (int4)(visiblePosition.x, visiblePosition.y, wi, 0), (float4)(newWeight.x, newWeight.y, 0.0f, 0.0f));
+			write_imagef(reconstructionWeights, (int4)(visiblePosition.x, visiblePosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
 		
 		wi++;
@@ -511,23 +493,9 @@ void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, 
 
 	float eligibility = error;
 	
-	float2 prevBias = read_imagef(visibleBiasesPrev, visiblePosition).xy;
+	float prevBias = read_imagef(visibleBiasesPrev, visiblePosition).x;
 		
-	float newTrace = (1.0f - traceDecay) * prevBias.y + beta * exp(-fabs(prevBias.y) * temperature) * eligibility;
-		
-	float2 newBias = (float2)(prevBias.x + alpha * newTrace, newTrace);
+	float newBias = prevBias + alpha * eligibility;
 	
-	write_imagef(visibleBiases, visiblePosition, (float4)(newBias.x, newBias.y, 0.0f, 0.0f));
-}
-
-void kernel layerUpdateQ(read_only image2d_t hiddenStates, read_only image2d_t qValuesPrev, write_only image2d_t qValues, float error) {
-	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
-
-	float prevQ = read_imagef(qValuesPrev, hiddenPosition).x;
-	
-	float sdr = read_imagef(hiddenStates, hiddenPosition).z;
-	
-	float newQ = prevQ + error * sdr;
-	
-	write_imagef(qValues, hiddenPosition, newQ);
+	write_imagef(visibleBiases, visiblePosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
 }

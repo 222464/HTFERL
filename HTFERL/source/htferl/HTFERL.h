@@ -16,7 +16,7 @@ namespace htferl {
 	class HTFERL {
 	public:
 		enum InputType {
-			_state, _action, _q
+			_state = 0, _action = 1, _q = 2
 		};
 
 		struct LayerDesc {
@@ -33,23 +33,22 @@ namespace htferl {
 			float _dutyCycleDecay;
 			float _feedForwardAlpha;
 			float _lateralAlpha;
-			float _feedForwardBeta;
-			float _lateralBeta;
 			float _gamma;
-			float _temperature;
 			float _lateralScalar;
-			float _traceDecay;
-			float _sdrDecay;
 
 			float _qWeight;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(4), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
 				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.5f), _feedForwardBeta(0.5f), _lateralAlpha(0.25f), _lateralBeta(0.5f),
-				_gamma(0.0f), _temperature(1.0f), _lateralScalar(0.4f), _traceDecay(1.0f), _sdrDecay(0.01f)
+				_feedForwardAlpha(0.1f), _lateralAlpha(0.05f),
+				_gamma(0.0f), _lateralScalar(0.25f)
 			{}
 		};
+
+		static float sigmoid(float x) {
+			return 1.0f / (1.0f + std::exp(-x));
+		}
 
 	private:
 		struct Layer {
@@ -86,6 +85,38 @@ namespace htferl {
 			cl::Image2D _visibleReconstructionPrev;
 		};
 
+		struct OutputConnection {
+			float _weight;
+			float _trace;
+
+			OutputConnection()
+				: _trace(0.0f)
+			{}
+		};
+
+		struct QNode {
+			float _output;
+			int _index;
+			
+			std::vector<OutputConnection> _connections;
+
+			QNode()
+				: _output(0.0f)
+			{}
+		};
+
+		struct ActionNode {
+			float _output;
+			float _maxOutput;
+			int _index;
+
+			std::vector<OutputConnection> _connections;
+
+			ActionNode()
+				: _output(0.0f), _maxOutput(0.0f)
+			{}
+		};
+
 		int _inputWidth, _inputHeight;
 
 		std::vector<LayerDesc> _layerDescs;
@@ -101,9 +132,11 @@ namespace htferl {
 		cl::Kernel _layerUpdateQKernel;
 
 		std::vector<float> _input;
-		std::vector<float> _prevMaxInput;
 
 		std::vector<InputType> _inputTypes;
+
+		std::vector<ActionNode> _actionNodes;
+		std::vector<QNode> _qNodes;
 
 		float _prevMax;
 		float _prevValue;
@@ -111,12 +144,10 @@ namespace htferl {
 		cl::Image2D _inputImage;
 		cl::Image2D _inputImagePrev;
 
-		cl::Image2D _learnImage;
-
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
-		void step(sys::ComputeSystem &cs, float reward, float minLearn, float alpha, float gamma, float breakChance, float perturbationStdDev, std::mt19937 &generator);
+		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float beta, float traceDecay, float temperature, std::mt19937 &generator);
 
 		int getInputWidth() const {
 			return _inputWidth;
@@ -124,6 +155,14 @@ namespace htferl {
 
 		int getInputHeight() const {
 			return _inputHeight;
+		}
+
+		int getNumActions() const {
+			return _actionNodes.size();
+		}
+
+		int getNumQNodes() const {
+			return _qNodes.size();
 		}
 
 		const std::vector<LayerDesc> &getLayerDescs() const {
@@ -139,11 +178,7 @@ namespace htferl {
 		}
 
 		float getOutput(int i) const {
-			return _input[i];
-		}
-
-		float getOutput(int x, int y) const {
-			return getOutput(x + y * _inputWidth);
+			return _actionNodes[i]._output;
 		}
 
 		void exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr<sf::Image>> &images, unsigned long seed) const;
