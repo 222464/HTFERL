@@ -117,6 +117,16 @@ namespace htferl {
 			{}
 		};
 
+		struct ReplaySample {
+			std::vector<float> _hiddenStates;
+
+			std::vector<float> _action;
+			std::vector<float> _maxAction;
+
+			float _q;
+			float _originalQ;
+		};
+
 		int _inputWidth, _inputHeight;
 
 		std::vector<LayerDesc> _layerDescs;
@@ -144,10 +154,12 @@ namespace htferl {
 		cl::Image2D _inputImage;
 		cl::Image2D _inputImagePrev;
 
+		std::list<ReplaySample> _replaySamples;
+
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
-		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float beta, float traceDecay, float temperature, std::mt19937 &generator);
+		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, std::mt19937 &generator);
 
 		int getInputWidth() const {
 			return _inputWidth;

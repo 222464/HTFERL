@@ -290,7 +290,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
 }
 
-void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float beta, float traceDecay, float temperature, std::mt19937 &generator) {
+void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, std::mt19937 &generator) {
 	struct Float2 {
 		float _x, _y;
 	};
@@ -613,7 +613,35 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	float newQ = _prevValue + qAlpha * tdError;
 
-	// Update Q nodes
+	// Update replay samples from before
+	float g = qGamma;
+
+	for (std::list<ReplaySample>::iterator it = _replaySamples.begin(); it != _replaySamples.end(); it++) {
+		it->_q += qAlpha * tdError * g;
+
+		g *= qGamma;
+	}
+
+	// Generate new replay sample
+	int numReconstructionWeightsFirst = std::pow(_layerDescs.front()._reconstructionRadius * 2 + 1, 2);
+
+	ReplaySample sample;
+
+	sample._originalQ = _prevValue;
+	sample._q = newQ;
+
+	sample._action.resize(_actionNodes.size());
+	sample._maxAction.resize(_actionNodes.size());
+
+	for (int i = 0; i < _actionNodes.size(); i++) {
+		sample._action[i] = _actionNodes[i]._output;
+		sample._maxAction[i] = _actionNodes[i]._maxOutput;
+	}
+
+	sample._hiddenStates.resize(numReconstructionWeightsFirst * (_qNodes.size() + _actionNodes.size()));
+
+	int hi = 0;
+
 	for (int i = 0; i < _qNodes.size(); i++) {
 		int cx = _qNodes[i]._index % _layerDescs.front()._width;
 		int cy = _qNodes[i]._index / _layerDescs.front()._width;
@@ -626,17 +654,181 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 				int y = cy + dy;
 
 				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-					int j = x + y * _layerDescs.front()._width;
+					float j = x + y * _layerDescs.front()._width;
 
-					_qNodes[i]._connections[wi]._weight += alphaQ * tdError * _qNodes[i]._connections[wi]._trace;
-					_qNodes[i]._connections[wi]._trace = (1.0f - traceDecay) * _qNodes[i]._connections[wi]._trace + std::exp(-std::abs(_qNodes[i]._connections[wi]._trace) * temperature) * firstHidden[j]._x;
+					sample._hiddenStates[hi] = firstHiddenPrev[j]._x;
 				}
 
 				wi++;
+				hi++;
 			}
 	}
 
-	// Retrieve action and then update actions
+	for (int i = 0; i < _actionNodes.size(); i++) {
+		int cx = _actionNodes[i]._index % _layerDescs.front()._width;
+		int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+
+		int wi = 0;
+
+		for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+			for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+				int x = cx + dx;
+				int y = cy + dy;
+
+				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+					float j = x + y * _layerDescs.front()._width;
+
+					sample._hiddenStates[hi] = firstHiddenPrev[j]._x;
+				}
+
+				wi++;
+				hi++;
+			}
+	}
+
+	// ---------------------------------- Experience Replay ----------------------------------
+
+	std::vector<std::list<ReplaySample>::iterator> sampleIters(_replaySamples.size());
+
+	int itIndex = 0;
+
+	for (std::list<ReplaySample>::iterator it = _replaySamples.begin(); it != _replaySamples.end(); it++)
+		sampleIters[itIndex++] = it;
+
+	if (_replaySamples.size() > 0) {
+		std::uniform_int_distribution<int> sampleDist(0, _replaySamples.size() - 1);
+
+		// Experience replay
+		for (int s = 0; s < numReplayIterations; s++) {
+			int replayIndex = sampleDist(generator);
+
+			ReplaySample &rs = *sampleIters[replayIndex];
+
+			// Get predicted Q values
+			int hi = 0;
+
+			std::vector<float> predictedQValues(_qNodes.size());
+
+			for (int i = 0; i < _qNodes.size(); i++) {
+				float sum = 0.0f;
+
+				int cx = _qNodes[i]._index % _layerDescs.front()._width;
+				int cy = _qNodes[i]._index / _layerDescs.front()._width;
+
+				int wi = 0;
+
+				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+						int x = cx + dx;
+						int y = cy + dy;
+
+						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+							float j = x + y * _layerDescs.front()._width;
+
+							sum += _qNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
+						}
+
+						wi++;
+						hi++;
+					}
+
+				predictedQValues[i] = sum;
+			}
+
+			// Update Q nodes
+			hi = 0;
+
+			for (int i = 0; i < _qNodes.size(); i++) {
+				float qError = sample._q - predictedQValues[i];
+
+				int cx = _qNodes[i]._index % _layerDescs.front()._width;
+				int cy = _qNodes[i]._index / _layerDescs.front()._width;
+
+				int wi = 0;
+
+				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+						int x = cx + dx;
+						int y = cy + dy;
+
+						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+							int j = x + y * _layerDescs.front()._width;
+
+							_qNodes[i]._connections[wi]._weight += alphaQ * qError * rs._hiddenStates[hi];
+						}
+
+						wi++;
+						hi++;
+					}
+			}
+
+			hi = _qNodes.size() * numReconstructionWeightsFirst;
+
+			// Get predicted actions
+			std::vector<float> predictedActions(_actionNodes.size());
+
+			for (int i = 0; i < _actionNodes.size(); i++) {
+				int wi = 0;
+
+				int cx = _actionNodes[i]._index % _layerDescs.front()._width;
+				int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+
+				float sum = 0.0f;
+
+				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+						int x = cx + dx;
+						int y = cy + dy;
+
+						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+							int j = x + y * _layerDescs.front()._width;
+
+							sum += _actionNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
+						}
+
+						wi++;
+						hi++;
+					}
+
+				predictedActions[i] = sigmoid(sum);
+			}
+
+			hi = _qNodes.size() * numReconstructionWeightsFirst;
+
+			std::vector<float> &actionsUse = rs._action;
+
+			if (rs._q < rs._originalQ)
+				actionsUse = rs._maxAction;
+
+			// Update actions
+			for (int i = 0; i < _actionNodes.size(); i++) {
+				int wi = 0;
+
+				int cx = _actionNodes[i]._index % _layerDescs.front()._width;
+				int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+
+				float outputError = actionsUse[i] - predictedActions[i];
+
+				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+						int x = cx + dx;
+						int y = cy + dy;
+
+						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+							int j = x + y * _layerDescs.front()._width;
+
+							_actionNodes[i]._connections[wi]._weight += alphaAction * outputError * rs._hiddenStates[hi];
+						}
+
+						wi++;
+						hi++;
+					}
+			}
+		}
+	}
+
+	// ---------------------------------- Retrieve action ----------------------------------
+
 	for (int i = 0; i < _actionNodes.size(); i++) {
 		float sum = 0.0f;
 
@@ -665,29 +857,12 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			_actionNodes[i]._output = dist01(generator);
 		else
 			_actionNodes[i]._output = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, _actionNodes[i]._maxOutput)) + pertDist(generator)));
-	
-		// Weight update and add to traces
-		wi = 0;
-
-		float outputError = _actionNodes[i]._output - _actionNodes[i]._maxOutput;
-
-		float learn = tdError > 0.0f ? 1.0f : 0.0f;
-
-		for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
-			for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-				int x = cx + dx;
-				int y = cy + dy;
-
-				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-					int j = x + y * _layerDescs.front()._width;
-
-					_actionNodes[i]._connections[wi]._weight += alphaAction * learn * _actionNodes[i]._connections[wi]._trace;
-					_actionNodes[i]._connections[wi]._trace = (1.0f - traceDecay) * _actionNodes[i]._connections[wi]._trace + std::exp(-std::abs(_actionNodes[i]._connections[wi]._trace) * temperature) * outputError * firstHidden[j]._x;
-				}
-
-				wi++;
-			}
 	}
+
+	_replaySamples.push_front(sample);
+
+	while (_replaySamples.size() > maxReplaySamples)
+		_replaySamples.pop_back();
 
 	_prevValue = nextQ;
 
