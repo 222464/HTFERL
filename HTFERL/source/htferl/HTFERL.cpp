@@ -542,6 +542,10 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// ----------------------------- Q Value Updates  -------------------------------
 	// ------------------------------------------------------------------------------
 
+	Float2 layerMinusOneOverInputMinusOne;
+	layerMinusOneOverInputMinusOne._x = static_cast<float>(_layerDescs.front()._width - 1) / static_cast<float>(_inputWidth - 1);
+	layerMinusOneOverInputMinusOne._y = static_cast<float>(_layerDescs.front()._height - 1) / static_cast<float>(_inputHeight - 1);
+
 	std::vector<Float2> firstHidden(_layerDescs.front()._width * _layerDescs.front()._height);
 	std::vector<Float2> firstHiddenPrev(_layerDescs.front()._width * _layerDescs.front()._height);
 
@@ -583,8 +587,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	for (int i = 0; i < _qNodes.size(); i++) {
 		float sum = 0.0f;
 
-		int cx = _qNodes[i]._index % _layerDescs.front()._width;
-		int cy = _qNodes[i]._index / _layerDescs.front()._width;
+		int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+		int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 		int wi = 0;
 
@@ -643,8 +647,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	int hi = 0;
 
 	for (int i = 0; i < _qNodes.size(); i++) {
-		int cx = _qNodes[i]._index % _layerDescs.front()._width;
-		int cy = _qNodes[i]._index / _layerDescs.front()._width;
+		int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+		int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 		int wi = 0;
 
@@ -665,8 +669,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	}
 
 	for (int i = 0; i < _actionNodes.size(); i++) {
-		int cx = _actionNodes[i]._index % _layerDescs.front()._width;
-		int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+		int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+		int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 		int wi = 0;
 
@@ -712,8 +716,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			for (int i = 0; i < _qNodes.size(); i++) {
 				float sum = 0.0f;
 
-				int cx = _qNodes[i]._index % _layerDescs.front()._width;
-				int cy = _qNodes[i]._index / _layerDescs.front()._width;
+				int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+				int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 				int wi = 0;
 
@@ -741,8 +745,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			for (int i = 0; i < _qNodes.size(); i++) {
 				float qError = sample._q - predictedQValues[i];
 
-				int cx = _qNodes[i]._index % _layerDescs.front()._width;
-				int cy = _qNodes[i]._index / _layerDescs.front()._width;
+				int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+				int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 				int wi = 0;
 
@@ -754,7 +758,9 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
 							int j = x + y * _layerDescs.front()._width;
 
-							_qNodes[i]._connections[wi]._weight += alphaQ * qError * rs._hiddenStates[hi];
+							float delta = momentum * _qNodes[i]._connections[wi]._prevDeltaWeight + alphaQ * qError * rs._hiddenStates[hi];
+							_qNodes[i]._connections[wi]._weight += delta;
+							_qNodes[i]._connections[wi]._prevDeltaWeight = delta;
 						}
 
 						wi++;
@@ -770,8 +776,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			for (int i = 0; i < _actionNodes.size(); i++) {
 				int wi = 0;
 
-				int cx = _actionNodes[i]._index % _layerDescs.front()._width;
-				int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+				int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+				int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 				float sum = 0.0f;
 
@@ -804,8 +810,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			for (int i = 0; i < _actionNodes.size(); i++) {
 				int wi = 0;
 
-				int cx = _actionNodes[i]._index % _layerDescs.front()._width;
-				int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+				int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+				int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 				float outputError = actionsUse[i] - predictedActions[i];
 
@@ -817,7 +823,9 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
 							int j = x + y * _layerDescs.front()._width;
 
-							_actionNodes[i]._connections[wi]._weight += alphaAction * outputError * rs._hiddenStates[hi];
+							float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
+							_actionNodes[i]._connections[wi]._weight += delta;
+							_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
 						}
 
 						wi++;
@@ -832,8 +840,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	for (int i = 0; i < _actionNodes.size(); i++) {
 		float sum = 0.0f;
 
-		int cx = _actionNodes[i]._index % _layerDescs.front()._width;
-		int cy = _actionNodes[i]._index / _layerDescs.front()._width;
+		int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+		int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
 		int wi = 0;
 
@@ -867,6 +875,23 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	_prevValue = nextQ;
 
 	std::cout << nextQ << " " << tdError << std::endl;
+
+	for (int i = 0; i < _qNodes.size(); i++)
+		_input[_qNodes[i]._index] = newQ;
+
+	{
+		cl::size_t<3> origin;
+		origin[0] = 0;
+		origin[1] = 0;
+		origin[2] = 0;
+
+		cl::size_t<3> region;
+		region[0] = _inputWidth;
+		region[1] = _inputHeight;
+		region[2] = 1;
+
+		cs.getQueue().enqueueWriteImage(_inputImage, CL_TRUE, origin, region, 0, 0, _input.data());
+	}
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
@@ -1028,11 +1053,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// -------------------------------- Update Input --------------------------------
 	// ------------------------------------------------------------------------------
 
-	_input.clear();
-	_input.assign(_inputWidth * _inputHeight, 0.0f);
-
 	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = newQ;
+		_input[_qNodes[i]._index] = nextQ;
 
 	for (int i = 0; i < _actionNodes.size(); i++)
 		_input[_actionNodes[i]._index] = _actionNodes[i]._output;

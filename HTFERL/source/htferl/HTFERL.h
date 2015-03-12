@@ -39,9 +39,9 @@ namespace htferl {
 			float _qWeight;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(4), _lateralConnectionRadius(3), _inhibitionRadius(2), _feedBackConnectionRadius(4),
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(4), _lateralConnectionRadius(3), _inhibitionRadius(3), _feedBackConnectionRadius(4),
 				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.1f), _lateralAlpha(0.05f),
+				_feedForwardAlpha(0.02f), _lateralAlpha(0.01f),
 				_gamma(0.0f), _lateralScalar(0.25f)
 			{}
 		};
@@ -87,10 +87,10 @@ namespace htferl {
 
 		struct OutputConnection {
 			float _weight;
-			float _trace;
+			float _prevDeltaWeight;
 
 			OutputConnection()
-				: _trace(0.0f)
+				: _prevDeltaWeight(0.0f)
 			{}
 		};
 
