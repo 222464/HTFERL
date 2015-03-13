@@ -39,10 +39,10 @@ namespace htferl {
 			float _qWeight;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(4), _lateralConnectionRadius(3), _inhibitionRadius(3), _feedBackConnectionRadius(4),
+				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(4), _feedBackConnectionRadius(4),
 				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.02f), _lateralAlpha(0.01f),
-				_gamma(0.0f), _lateralScalar(0.25f)
+				_feedForwardAlpha(0.1f), _lateralAlpha(0.05f),
+				_gamma(0.0f), _lateralScalar(0.5f)
 			{}
 		};
 
@@ -125,6 +125,8 @@ namespace htferl {
 
 			float _q;
 			float _originalQ;
+
+			float _tdError;
 		};
 
 		int _inputWidth, _inputHeight;
@@ -148,18 +150,19 @@ namespace htferl {
 		std::vector<ActionNode> _actionNodes;
 		std::vector<QNode> _qNodes;
 
-		float _prevMax;
 		float _prevValue;
-
+		
 		cl::Image2D _inputImage;
 		cl::Image2D _inputImagePrev;
 
 		std::list<ReplaySample> _replaySamples;
 
+		ReplaySample _constructionSample;
+
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
-		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, std::mt19937 &generator);
+		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, int actionSampleCutoff, std::mt19937 &generator);
 
 		int getInputWidth() const {
 			return _inputWidth;

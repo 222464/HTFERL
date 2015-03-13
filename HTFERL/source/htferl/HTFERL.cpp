@@ -23,7 +23,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	std::uniform_real_distribution<float> weightDist(minInitWeight, maxInitWeight);
 	std::uniform_real_distribution<float> actionDist(0.0f, 1.0f);
 
-	_prevMax = 0.0f;
 	_prevValue = 0.0f;
 
 	cl::Kernel initializeLayerHiddenKernel = cl::Kernel(program.getProgram(), "initializeLayerHidden");
@@ -66,6 +65,19 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 		}
 		else
 			_input[i] = 0.0f;
+
+	_constructionSample._hiddenStates.clear();
+	_constructionSample._hiddenStates.assign(numReconstructionWeightsFirst * (_qNodes.size() + _actionNodes.size()), 0.0f);
+
+	_constructionSample._action.clear();
+	_constructionSample._action.assign(_actionNodes.size(), 0.0f);
+
+	_constructionSample._maxAction = _constructionSample._action;
+
+	_constructionSample._originalQ = 0.0f;
+	_constructionSample._q = 0.0f;
+
+	_constructionSample._tdError = 0.0f;
 
 	_inputImage = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _inputWidth, _inputHeight);
 	_inputImagePrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _inputWidth, _inputHeight);
@@ -290,7 +302,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
 }
 
-void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, std::mt19937 &generator) {
+void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float momentum, int maxReplaySamples, int numReplayIterations, int actionSampleCutoff, std::mt19937 &generator) {
 	struct Float2 {
 		float _x, _y;
 	};
@@ -560,8 +572,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		origin[2] = 0;
 
 		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
+		region[0] = _layerDescs.front()._width;
+		region[1] = _layerDescs.front()._height;
 		region[2] = 1;
 
 		cs.getQueue().enqueueReadImage(_layers.front()._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, firstHidden.data());
@@ -574,8 +586,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		origin[2] = 0;
 
 		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
+		region[0] = _layerDescs.front()._width;
+		region[1] = _layerDescs.front()._height;
 		region[2] = 1;
 
 		cs.getQueue().enqueueReadImage(_layers.front()._hiddenStatesFeedBackPrev, CL_TRUE, origin, region, 0, 0, firstHiddenPrev.data());
@@ -583,7 +595,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	// Find nextQ
 	float nextQ = 0.0f;
-	
+
 	for (int i = 0; i < _qNodes.size(); i++) {
 		float sum = 0.0f;
 
@@ -598,7 +610,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 				int y = cy + dy;
 
 				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-					float j = x + y * _layerDescs.front()._width;
+					int j = x + y * _layerDescs.front()._width;
 
 					sum += _qNodes[i]._connections[wi]._weight * firstHidden[j]._x;
 				}
@@ -611,83 +623,80 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		nextQ += _qNodes[i]._output;
 	}
 
-	nextQ /= _qNodes.size();
-
-	float tdError = reward + qGamma * nextQ - _prevValue;
-
-	float newQ = _prevValue + qAlpha * tdError;
+	float tdError = qAlpha * (reward + qGamma * nextQ - _prevValue);
 
 	// Update replay samples from before
+	_constructionSample._originalQ = _prevValue;
+	_constructionSample._q = _prevValue + tdError;
+
+	_constructionSample._tdError = tdError;
+
 	float g = qGamma;
 
 	for (std::list<ReplaySample>::iterator it = _replaySamples.begin(); it != _replaySamples.end(); it++) {
-		it->_q += qAlpha * tdError * g;
+		it->_q += g * tdError;
+
+		it->_tdError += g * tdError;
 
 		g *= qGamma;
 	}
 
+	_replaySamples.push_front(_constructionSample);
+
+	while (_replaySamples.size() > maxReplaySamples)
+		_replaySamples.pop_back();
+
 	// Generate new replay sample
 	int numReconstructionWeightsFirst = std::pow(_layerDescs.front()._reconstructionRadius * 2 + 1, 2);
 
-	ReplaySample sample;
+	{
+		int hi = 0;
 
-	sample._originalQ = _prevValue;
-	sample._q = newQ;
+		for (int i = 0; i < _qNodes.size(); i++) {
+			int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+			int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
-	sample._action.resize(_actionNodes.size());
-	sample._maxAction.resize(_actionNodes.size());
+			int wi = 0;
 
-	for (int i = 0; i < _actionNodes.size(); i++) {
-		sample._action[i] = _actionNodes[i]._output;
-		sample._maxAction[i] = _actionNodes[i]._maxOutput;
-	}
+			for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+				for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+					int x = cx + dx;
+					int y = cy + dy;
 
-	sample._hiddenStates.resize(numReconstructionWeightsFirst * (_qNodes.size() + _actionNodes.size()));
+					if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+						int j = x + y * _layerDescs.front()._width;
 
-	int hi = 0;
+						_constructionSample._hiddenStates[hi] = firstHidden[j]._x;
+					}
 
-	for (int i = 0; i < _qNodes.size(); i++) {
-		int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
-		int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
-
-		int wi = 0;
-
-		for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
-			for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-				int x = cx + dx;
-				int y = cy + dy;
-
-				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-					float j = x + y * _layerDescs.front()._width;
-
-					sample._hiddenStates[hi] = firstHiddenPrev[j]._x;
+					wi++;
+					hi++;
 				}
+		}
 
-				wi++;
-				hi++;
-			}
-	}
+		hi = _qNodes.size() * numReconstructionWeightsFirst;
 
-	for (int i = 0; i < _actionNodes.size(); i++) {
-		int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
-		int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+		for (int i = 0; i < _actionNodes.size(); i++) {
+			int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+			int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
-		int wi = 0;
+			int wi = 0;
 
-		for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
-			for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-				int x = cx + dx;
-				int y = cy + dy;
+			for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+				for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+					int x = cx + dx;
+					int y = cy + dy;
 
-				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-					float j = x + y * _layerDescs.front()._width;
+					if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+						int j = x + y * _layerDescs.front()._width;
 
-					sample._hiddenStates[hi] = firstHiddenPrev[j]._x;
+						_constructionSample._hiddenStates[hi] = firstHidden[j]._x;
+					}
+
+					wi++;
+					hi++;
 				}
-
-				wi++;
-				hi++;
-			}
+		}
 	}
 
 	// ---------------------------------- Experience Replay ----------------------------------
@@ -727,7 +736,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 						int y = cy + dy;
 
 						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-							float j = x + y * _layerDescs.front()._width;
+							int j = x + y * _layerDescs.front()._width;
 
 							sum += _qNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
 						}
@@ -743,7 +752,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			hi = 0;
 
 			for (int i = 0; i < _qNodes.size(); i++) {
-				float qError = sample._q - predictedQValues[i];
+				float qError = rs._q / _qNodes.size() - predictedQValues[i];
 
 				int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
 				int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
@@ -796,41 +805,43 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 						hi++;
 					}
 
-				predictedActions[i] = sigmoid(sum);
+				predictedActions[i] = sum;
 			}
 
 			hi = _qNodes.size() * numReconstructionWeightsFirst;
 
-			std::vector<float> &actionsUse = rs._action;
+			if (replayIndex < actionSampleCutoff) {
+				std::vector<float> &actionsUse = rs._action;
 
-			if (rs._q < rs._originalQ)
-				actionsUse = rs._maxAction;
+				if (rs._tdError < 0.0f)
+					actionsUse = rs._maxAction;
 
-			// Update actions
-			for (int i = 0; i < _actionNodes.size(); i++) {
-				int wi = 0;
+				// Update actions
+				for (int i = 0; i < _actionNodes.size(); i++) {
+					int wi = 0;
 
-				int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
-				int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+					int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+					int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
 
-				float outputError = actionsUse[i] - predictedActions[i];
+					float outputError = actionsUse[i] - predictedActions[i];
 
-				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
-					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-						int x = cx + dx;
-						int y = cy + dy;
+					for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+						for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+							int x = cx + dx;
+							int y = cy + dy;
 
-						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-							int j = x + y * _layerDescs.front()._width;
+							if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+								int j = x + y * _layerDescs.front()._width;
 
-							float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
-							_actionNodes[i]._connections[wi]._weight += delta;
-							_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
+								float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
+								_actionNodes[i]._connections[wi]._weight += delta;
+								_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
+							}
+
+							wi++;
+							hi++;
 						}
-
-						wi++;
-						hi++;
-					}
+				}
 			}
 		}
 	}
@@ -859,39 +870,22 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 				wi++;
 			}
 
-		_actionNodes[i]._maxOutput = sigmoid(sum);
+		_actionNodes[i]._maxOutput = std::min<float>(1.0f, std::max<float>(-1.0f, sum));
 
 		if (dist01(generator) < breakChance)
-			_actionNodes[i]._output = dist01(generator);
+			_actionNodes[i]._output = dist01(generator) * 2.0f - 1.0f;
 		else
-			_actionNodes[i]._output = std::min<float>(1.0f, std::max<float>(0.0f, std::min<float>(1.0f, std::max<float>(0.0f, _actionNodes[i]._maxOutput)) + pertDist(generator)));
+			_actionNodes[i]._output = std::min<float>(1.0f, std::max<float>(-1.0f, _actionNodes[i]._maxOutput + pertDist(generator)));
 	}
 
-	_replaySamples.push_front(sample);
-
-	while (_replaySamples.size() > maxReplaySamples)
-		_replaySamples.pop_back();
+	for (int i = 0; i < _actionNodes.size(); i++) {
+		_constructionSample._action[i] = _actionNodes[i]._output;
+		_constructionSample._maxAction[i] = _actionNodes[i]._maxOutput;
+	}
 
 	_prevValue = nextQ;
 
 	std::cout << nextQ << " " << tdError << std::endl;
-
-	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = newQ;
-
-	{
-		cl::size_t<3> origin;
-		origin[0] = 0;
-		origin[1] = 0;
-		origin[2] = 0;
-
-		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
-		region[2] = 1;
-
-		cs.getQueue().enqueueWriteImage(_inputImage, CL_TRUE, origin, region, 0, 0, _input.data());
-	}
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
@@ -1074,44 +1068,6 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
 
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
-		std::vector<float> state(_inputWidth * _inputHeight * 2);
-
-		cl::size_t<3> origin;
-		origin[0] = 0;
-		origin[1] = 0;
-		origin[2] = 0;
-
-		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
-		region[2] = 1;
-
-		cs.getQueue().enqueueReadImage(_layers.front()._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, &state[0]);
-
-		sf::Color c;
-		c.r = uniformDist(generator) * 255.0f;
-		c.g = uniformDist(generator) * 255.0f;
-		c.b = uniformDist(generator) * 255.0f;
-
-		// Convert to colors
-		std::shared_ptr<sf::Image> image = std::make_shared<sf::Image>();
-
-		image->create(maxWidth, maxHeight, sf::Color::Transparent);
-
-		for (int x = 0; x < _inputWidth; x++)
-		for (int y = 0; y < _inputHeight; y++) {
-			sf::Color color;
-
-			color = c;
-
-			color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
-
-			image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
-		}
-
-		images.push_back(image);
-	}
-	else {
 		std::vector<float> state(_inputWidth * _inputHeight);
 
 		cl::size_t<3> origin;
@@ -1137,7 +1093,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 		image->create(maxWidth, maxHeight, sf::Color::Transparent);
 
 		for (int x = 0; x < _inputWidth; x++)
-			for (int y = 0; y < _inputHeight; y++) {
+		for (int y = 0; y < _inputHeight; y++) {
 			sf::Color color;
 
 			color = c;
@@ -1145,8 +1101,48 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
 
 			image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
-			}
+		}
 
 		images.push_back(image);
+	}
+	else {
+		for (int l = 0; l < _layers.size(); l++) {
+			std::vector<float> state(_layerDescs[l]._width * _layerDescs[l]._height * 2);
+
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = _layerDescs[l]._width;
+			region[1] = _layerDescs[l]._height;
+			region[2] = 1;
+
+			cs.getQueue().enqueueReadImage(_layers[l]._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, &state[0]);
+
+			sf::Color c;
+			c.r = uniformDist(generator) * 255.0f;
+			c.g = uniformDist(generator) * 255.0f;
+			c.b = uniformDist(generator) * 255.0f;
+
+			// Convert to colors
+			std::shared_ptr<sf::Image> image = std::make_shared<sf::Image>();
+
+			image->create(maxWidth, maxHeight, sf::Color::Transparent);
+
+			for (int x = 0; x < _layerDescs[l]._width; x++)
+				for (int y = 0; y < _layerDescs[l]._height; y++) {
+					sf::Color color;
+
+					color = c;
+
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _layerDescs[l]._width)])) * (255.0f - 3.0f) + 3;
+
+					image->setPixel(x - _layerDescs[l]._width / 2 + maxWidth / 2, y - _layerDescs[l]._height / 2 + maxHeight / 2, color);
+				}
+
+			images.push_back(image);
+		}
 	}
 }
