@@ -310,28 +310,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	struct Int2 {
 		int _x, _y;
 	};
-	
-	// Step begin
-	for (int l = 0; l < _layers.size(); l++) {
-		cl::Image2D temp2D;
-
-		std::swap(_layers[l]._visibleReconstruction, _layers[l]._visibleReconstructionPrev);
-		std::swap(_layers[l]._hiddenStatesFeedForward, _layers[l]._hiddenStatesFeedForwardPrev);
-		//std::swap(_layers[l]._hiddenStates, _layers[l]._hiddenStatesPrev);
-		temp2D = _layers[l]._hiddenStatesFeedBackPrevPrev;
-		_layers[l]._hiddenStatesFeedBackPrevPrev = _layers[l]._hiddenStatesFeedBackPrev;
-		_layers[l]._hiddenStatesFeedBackPrev = _layers[l]._hiddenStatesFeedBack;
-		_layers[l]._hiddenStatesFeedBack = temp2D;
-
-		std::swap(_layers[l]._feedForwardWeights, _layers[l]._feedForwardWeightsPrev);
-		std::swap(_layers[l]._reconstructionWeights, _layers[l]._reconstructionWeightsPrev);
-		std::swap(_layers[l]._visibleBiases, _layers[l]._visibleBiasesPrev);
-		std::swap(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev);
-		std::swap(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev);
-		std::swap(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev);
-	}
-		
-	std::swap(_inputImage, _inputImagePrev);
 
 	{
 		cl::size_t<3> origin;
@@ -559,7 +537,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	layerMinusOneOverInputMinusOne._y = static_cast<float>(_layerDescs.front()._height - 1) / static_cast<float>(_inputHeight - 1);
 
 	std::vector<Float2> firstHidden(_layerDescs.front()._width * _layerDescs.front()._height);
-	std::vector<Float2> firstHiddenPrev(_layerDescs.front()._width * _layerDescs.front()._height);
 
 	// Exploratory action
 	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
@@ -577,20 +554,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		region[2] = 1;
 
 		cs.getQueue().enqueueReadImage(_layers.front()._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, firstHidden.data());
-	}
-
-	{
-		cl::size_t<3> origin;
-		origin[0] = 0;
-		origin[1] = 0;
-		origin[2] = 0;
-
-		cl::size_t<3> region;
-		region[0] = _layerDescs.front()._width;
-		region[1] = _layerDescs.front()._height;
-		region[2] = 1;
-
-		cs.getQueue().enqueueReadImage(_layers.front()._hiddenStatesFeedBackPrev, CL_TRUE, origin, region, 0, 0, firstHiddenPrev.data());
 	}
 
 	// Find nextQ
@@ -1048,10 +1011,32 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// ------------------------------------------------------------------------------
 
 	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = nextQ;
+		_input[_qNodes[i]._index] = nextQ / _qNodes.size();
 
 	for (int i = 0; i < _actionNodes.size(); i++)
 		_input[_actionNodes[i]._index] = _actionNodes[i]._output;
+
+	// Step end
+	for (int l = 0; l < _layers.size(); l++) {
+		cl::Image2D temp2D;
+
+		std::swap(_layers[l]._visibleReconstruction, _layers[l]._visibleReconstructionPrev);
+		std::swap(_layers[l]._hiddenStatesFeedForward, _layers[l]._hiddenStatesFeedForwardPrev);
+		//std::swap(_layers[l]._hiddenStates, _layers[l]._hiddenStatesPrev);
+		temp2D = _layers[l]._hiddenStatesFeedBackPrevPrev;
+		_layers[l]._hiddenStatesFeedBackPrevPrev = _layers[l]._hiddenStatesFeedBackPrev;
+		_layers[l]._hiddenStatesFeedBackPrev = _layers[l]._hiddenStatesFeedBack;
+		_layers[l]._hiddenStatesFeedBack = temp2D;
+
+		std::swap(_layers[l]._feedForwardWeights, _layers[l]._feedForwardWeightsPrev);
+		std::swap(_layers[l]._reconstructionWeights, _layers[l]._reconstructionWeightsPrev);
+		std::swap(_layers[l]._visibleBiases, _layers[l]._visibleBiasesPrev);
+		std::swap(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev);
+		std::swap(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev);
+		std::swap(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev);
+	}
+
+	std::swap(_inputImage, _inputImagePrev);
 }
 
 void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr<sf::Image>> &images, unsigned long seed) const {
@@ -1068,42 +1053,82 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
 
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
-		std::vector<float> state(_inputWidth * _inputHeight);
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::O)) {
+			std::vector<float> state(_inputWidth * _inputHeight);
 
-		cl::size_t<3> origin;
-		origin[0] = 0;
-		origin[1] = 0;
-		origin[2] = 0;
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
 
-		cl::size_t<3> region;
-		region[0] = _inputWidth;
-		region[1] = _inputHeight;
-		region[2] = 1;
+			cl::size_t<3> region;
+			region[0] = _inputWidth;
+			region[1] = _inputHeight;
+			region[2] = 1;
 
-		cs.getQueue().enqueueReadImage(_layers.front()._visibleReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_inputImage, CL_TRUE, origin, region, 0, 0, &state[0]);
 
-		sf::Color c;
-		c.r = uniformDist(generator) * 255.0f;
-		c.g = uniformDist(generator) * 255.0f;
-		c.b = uniformDist(generator) * 255.0f;
+			sf::Color c;
+			c.r = uniformDist(generator) * 255.0f;
+			c.g = uniformDist(generator) * 255.0f;
+			c.b = uniformDist(generator) * 255.0f;
 
-		// Convert to colors
-		std::shared_ptr<sf::Image> image = std::make_shared<sf::Image>();
+			// Convert to colors
+			std::shared_ptr<sf::Image> image = std::make_shared<sf::Image>();
 
-		image->create(maxWidth, maxHeight, sf::Color::Transparent);
+			image->create(maxWidth, maxHeight, sf::Color::Transparent);
 
-		for (int x = 0; x < _inputWidth; x++)
-		for (int y = 0; y < _inputHeight; y++) {
-			sf::Color color;
+			for (int x = 0; x < _inputWidth; x++)
+				for (int y = 0; y < _inputHeight; y++) {
+				sf::Color color;
 
-			color = c;
+				color = c;
 
-			color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
+				color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
 
-			image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
+				image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
+				}
+
+			images.push_back(image);
 		}
+		else {
+			std::vector<float> state(_inputWidth * _inputHeight);
 
-		images.push_back(image);
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = _inputWidth;
+			region[1] = _inputHeight;
+			region[2] = 1;
+
+			cs.getQueue().enqueueReadImage(_layers.front()._visibleReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+
+			sf::Color c;
+			c.r = uniformDist(generator) * 255.0f;
+			c.g = uniformDist(generator) * 255.0f;
+			c.b = uniformDist(generator) * 255.0f;
+
+			// Convert to colors
+			std::shared_ptr<sf::Image> image = std::make_shared<sf::Image>();
+
+			image->create(maxWidth, maxHeight, sf::Color::Transparent);
+
+			for (int x = 0; x < _inputWidth; x++)
+				for (int y = 0; y < _inputHeight; y++) {
+				sf::Color color;
+
+				color = c;
+
+				color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _inputWidth)])) * (255.0f - 3.0f) + 3;
+
+				image->setPixel(x - _inputWidth / 2 + maxWidth / 2, y - _inputHeight / 2 + maxHeight / 2, color);
+				}
+
+			images.push_back(image);
+		}
 	}
 	else {
 		for (int l = 0; l < _layers.size(); l++) {
