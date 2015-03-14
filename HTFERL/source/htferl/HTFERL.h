@@ -33,15 +33,16 @@ namespace htferl {
 			float _dutyCycleDecay;
 			float _feedForwardAlpha;
 			float _lateralAlpha;
+			float _feedBackAlpha;
 			float _gamma;
 			float _lateralScalar;
 
 			float _qWeight;
 
 			LayerDesc()
-				: _width(16), _height(16), _receptiveFieldRadius(3), _reconstructionRadius(3), _lateralConnectionRadius(3), _inhibitionRadius(4), _feedBackConnectionRadius(4),
-				_sparsity(1.01f / 25.0f), _dutyCycleDecay(0.01f),
-				_feedForwardAlpha(0.1f), _lateralAlpha(0.05f),
+				: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(4), _lateralConnectionRadius(4), _inhibitionRadius(4), _feedBackConnectionRadius(4),
+				_sparsity(1.01f / 64.0f), _dutyCycleDecay(0.01f),
+				_feedForwardAlpha(0.08f), _lateralAlpha(0.04f), _feedBackAlpha(0.15f),
 				_gamma(0.0f), _lateralScalar(0.5f)
 			{}
 		};

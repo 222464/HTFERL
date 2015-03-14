@@ -238,7 +238,7 @@ void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only 
 void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev, read_only image2d_t nextLayerHiddenStatesPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev, read_only image3d_t feedBackWeightsPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases, write_only image3d_t feedBackWeights,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float gamma) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float3 alpha, float gamma) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	
@@ -341,7 +341,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 	
 			float prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 			
-			float newWeight = prevWeight + alpha.x * eligibility;
+			float newWeight = prevWeight + alpha.z * eligibility;
 			
 			write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
 		}
@@ -361,7 +361,7 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float2 alpha, float gamma) 
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float3 alpha, float gamma) 
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 	

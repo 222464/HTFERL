@@ -307,6 +307,10 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		float _x, _y;
 	};
 
+	struct Float3 {
+		float _x, _y, _z;
+	};
+
 	struct Int2 {
 		int _x, _y;
 	};
@@ -586,6 +590,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		nextQ += _qNodes[i]._output;
 	}
 
+	nextQ /= _qNodes.size();
+
 	float tdError = qAlpha * (reward + qGamma * nextQ - _prevValue);
 
 	// Update replay samples from before
@@ -715,7 +721,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 			hi = 0;
 
 			for (int i = 0; i < _qNodes.size(); i++) {
-				float qError = rs._q / _qNodes.size() - predictedQValues[i];
+				float qError = rs._q - predictedQValues[i];
 
 				int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
 				int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
@@ -724,19 +730,19 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
 					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-						int x = cx + dx;
-						int y = cy + dy;
+					int x = cx + dx;
+					int y = cy + dy;
 
-						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-							int j = x + y * _layerDescs.front()._width;
+					if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+						int j = x + y * _layerDescs.front()._width;
 
-							float delta = momentum * _qNodes[i]._connections[wi]._prevDeltaWeight + alphaQ * qError * rs._hiddenStates[hi];
-							_qNodes[i]._connections[wi]._weight += delta;
-							_qNodes[i]._connections[wi]._prevDeltaWeight = delta;
-						}
+						float delta = momentum * _qNodes[i]._connections[wi]._prevDeltaWeight + alphaQ * qError * rs._hiddenStates[hi];
+						_qNodes[i]._connections[wi]._weight += delta;
+						_qNodes[i]._connections[wi]._prevDeltaWeight = delta;
+					}
 
-						wi++;
-						hi++;
+					wi++;
+					hi++;
 					}
 			}
 
@@ -755,17 +761,17 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
 					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-						int x = cx + dx;
-						int y = cy + dy;
+					int x = cx + dx;
+					int y = cy + dy;
 
-						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-							int j = x + y * _layerDescs.front()._width;
+					if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+						int j = x + y * _layerDescs.front()._width;
 
-							sum += _actionNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
-						}
+						sum += _actionNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
+					}
 
-						wi++;
-						hi++;
+					wi++;
+					hi++;
 					}
 
 				predictedActions[i] = sum;
@@ -790,21 +796,155 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 					for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
 						for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
-							int x = cx + dx;
-							int y = cy + dy;
+						int x = cx + dx;
+						int y = cy + dy;
 
-							if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
-								int j = x + y * _layerDescs.front()._width;
+						if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+							int j = x + y * _layerDescs.front()._width;
 
-								float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
-								_actionNodes[i]._connections[wi]._weight += delta;
-								_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
-							}
+							float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
+							_actionNodes[i]._connections[wi]._weight += delta;
+							_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
+						}
 
-							wi++;
-							hi++;
+						wi++;
+						hi++;
 						}
 				}
+			}
+		}
+	}
+
+	// Make sure latest sample has at least one iteration on it
+	{
+		int replayIndex = 0;
+
+		ReplaySample &rs = *sampleIters[replayIndex];
+
+		// Get predicted Q values
+		int hi = 0;
+
+		std::vector<float> predictedQValues(_qNodes.size());
+
+		for (int i = 0; i < _qNodes.size(); i++) {
+			float sum = 0.0f;
+
+			int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+			int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+
+			int wi = 0;
+
+			for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+				for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+				int x = cx + dx;
+				int y = cy + dy;
+
+				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+					int j = x + y * _layerDescs.front()._width;
+
+					sum += _qNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
+				}
+
+				wi++;
+				hi++;
+				}
+
+			predictedQValues[i] = sum;
+		}
+
+		// Update Q nodes
+		hi = 0;
+
+		for (int i = 0; i < _qNodes.size(); i++) {
+			float qError = rs._q - predictedQValues[i];
+
+			int cx = std::round((_qNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+			int cy = std::round((_qNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+
+			int wi = 0;
+
+			for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+				for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+				int x = cx + dx;
+				int y = cy + dy;
+
+				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+					int j = x + y * _layerDescs.front()._width;
+
+					float delta = momentum * _qNodes[i]._connections[wi]._prevDeltaWeight + alphaQ * qError * rs._hiddenStates[hi];
+					_qNodes[i]._connections[wi]._weight += delta;
+					_qNodes[i]._connections[wi]._prevDeltaWeight = delta;
+				}
+
+				wi++;
+				hi++;
+				}
+		}
+
+		hi = _qNodes.size() * numReconstructionWeightsFirst;
+
+		// Get predicted actions
+		std::vector<float> predictedActions(_actionNodes.size());
+
+		for (int i = 0; i < _actionNodes.size(); i++) {
+			int wi = 0;
+
+			int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+			int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+
+			float sum = 0.0f;
+
+			for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+				for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+				int x = cx + dx;
+				int y = cy + dy;
+
+				if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+					int j = x + y * _layerDescs.front()._width;
+
+					sum += _actionNodes[i]._connections[wi]._weight * rs._hiddenStates[hi];
+				}
+
+				wi++;
+				hi++;
+				}
+
+			predictedActions[i] = sum;
+		}
+
+		hi = _qNodes.size() * numReconstructionWeightsFirst;
+
+		if (replayIndex < actionSampleCutoff) {
+			std::vector<float> &actionsUse = rs._action;
+
+			if (rs._tdError < 0.0f)
+				actionsUse = rs._maxAction;
+
+			// Update actions
+			for (int i = 0; i < _actionNodes.size(); i++) {
+				int wi = 0;
+
+				int cx = std::round((_actionNodes[i]._index % _inputWidth) * layerMinusOneOverInputMinusOne._x);
+				int cy = std::round((_actionNodes[i]._index / _inputWidth) * layerMinusOneOverInputMinusOne._y);
+
+				float outputError = actionsUse[i] - predictedActions[i];
+
+				for (int dx = -_layerDescs.front()._reconstructionRadius; dx <= _layerDescs.front()._reconstructionRadius; dx++)
+					for (int dy = -_layerDescs.front()._reconstructionRadius; dy <= _layerDescs.front()._reconstructionRadius; dy++) {
+					int x = cx + dx;
+					int y = cy + dy;
+
+					if (x >= 0 && y >= 0 && x < _layerDescs.front()._width && y < _layerDescs.front()._height) {
+						int j = x + y * _layerDescs.front()._width;
+
+						float delta = momentum * _actionNodes[i]._connections[wi]._prevDeltaWeight + alphaAction * outputError * rs._hiddenStates[hi];
+						_actionNodes[i]._connections[wi]._weight += delta;
+						_actionNodes[i]._connections[wi]._prevDeltaWeight = delta;
+					}
+
+					wi++;
+					hi++;
+					}
 			}
 		}
 	}
@@ -853,6 +993,23 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
 	// ------------------------------------------------------------------------------
+
+	for (int i = 0; i < _qNodes.size(); i++)
+		_input[_qNodes[i]._index] = _constructionSample._q;
+
+	{
+		cl::size_t<3> origin;
+		origin[0] = 0;
+		origin[1] = 0;
+		origin[2] = 0;
+
+		cl::size_t<3> region;
+		region[0] = _inputWidth;
+		region[1] = _inputHeight;
+		region[2] = 1;
+
+		cs.getQueue().enqueueWriteImage(_inputImage, CL_TRUE, origin, region, 0, 0, _input.data());
+	}
 
 	pPrevLayer = &_inputImage;
 	prevWidth = _inputWidth;
@@ -908,9 +1065,10 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 		// ------------------------------- Weight Updates -------------------------------
 
-		Float2 alphas;
+		Float3 alphas;
 		alphas._x = _layerDescs[l]._feedForwardAlpha;
 		alphas._y = _layerDescs[l]._lateralAlpha;
+		alphas._z = _layerDescs[l]._feedBackAlpha;
 
 		int index = 0;
 
@@ -1009,9 +1167,6 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// ------------------------------------------------------------------------------
 	// -------------------------------- Update Input --------------------------------
 	// ------------------------------------------------------------------------------
-
-	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = nextQ / _qNodes.size();
 
 	for (int i = 0; i < _actionNodes.size(); i++)
 		_input[_actionNodes[i]._index] = _actionNodes[i]._output;
