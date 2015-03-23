@@ -20,7 +20,7 @@ int main() {
 
 	sys::ComputeProgram program;
 
-	program.loadFromFile("resources/htferl.cl", cs);
+	program.loadFromFile("resources/htfe.cl", cs);
 
 	float reward = 0.0f;
 	float prevReward = 0.0f;
@@ -139,19 +139,22 @@ int main() {
 
 	htferl::HTFERL agent;
 
-	std::vector<htferl::HTFERL::LayerDesc> layerDescs(4);
+	std::vector<htfe::LayerDesc> layerDescs(5);
 
-	layerDescs[0]._width = 64;
-	layerDescs[0]._height = 64;
+	layerDescs[0]._width = 128;
+	layerDescs[0]._height = 128;
 
-	layerDescs[1]._width = 44;
-	layerDescs[1]._height = 44;
+	layerDescs[1]._width = 88;
+	layerDescs[1]._height = 88;
 
-	layerDescs[2]._width = 32;
-	layerDescs[2]._height = 32;
+	layerDescs[2]._width = 64;
+	layerDescs[2]._height = 64;
 
-	layerDescs[3]._width = 20;
-	layerDescs[3]._height = 20;
+	layerDescs[3]._width = 40;
+	layerDescs[3]._height = 40;
+
+	layerDescs[4]._width = 30;
+	layerDescs[4]._height = 30;
 
 	std::vector<htferl::HTFERL::InputType> inputTypes(64 * 64, htferl::HTFERL::_state);
 
@@ -170,7 +173,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}*/
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 1; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -182,7 +185,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}
 
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < 4; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -289,7 +292,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward * 0.01f, 0.7f, 0.995f, 0.1f, 0.1f, 0.2f, 0.2f, 0.5f, 600, 400, 120, generator);
+		agent.step(cs, reward * 0.05f, 0.7f, 0.993f, 0.07f, 0.04f, 0.05f, 0.05f, 0.01f, generator);
 
 		float output = 0.0f;
 		int c = 0;
@@ -301,7 +304,7 @@ int main() {
 
 		output /= c;
 
-		float dir = std::min<float>(1.0f, std::max<float>(-1.0f, 1.8f * (output)));
+		float dir = std::min<float>(1.0f, std::max<float>(-1.0f, 1.4f * (output)));
 
 		//std::cout << dir << std::endl;
 
