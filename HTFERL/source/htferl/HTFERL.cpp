@@ -1,6 +1,7 @@
 #include "HTFERL.h"
 
 #include <iostream>
+#include <algorithm>
 
 using namespace htferl;
 
@@ -34,7 +35,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			float value = actionDist(generator);
 
 			_input[i] = value;
-		
+
 			ActionNode actionNode;
 
 			actionNode._index = i;
@@ -62,7 +63,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			_input[i] = 0.0f;
 }
 
-void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float traceDecay, std::mt19937 &generator) {
+void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, std::mt19937 &generator) {
 	struct Float2 {
 		float _x, _y;
 	};
@@ -74,7 +75,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	struct Int2 {
 		int _x, _y;
 	};
-	
+
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	// ------------------------------------------------------------------------------
@@ -91,8 +92,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// ------------------------------------------------------------------------------
 
 	Float2 layerOverInput;
-	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._width) / static_cast<float>(_htfe.getInputWidth());
-	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._height) / static_cast<float>(_htfe.getInputHeight());
+	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._width - 1) / static_cast<float>(_htfe.getInputWidth() - 1);
+	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._height - 1) / static_cast<float>(_htfe.getInputHeight() - 1);
 
 	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._width * _htfe.getLayerDescs().front()._height);
 
@@ -120,8 +121,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	for (int i = 0; i < _qNodes.size(); i++) {
 		float sum = 0.0f;
 
-		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth() + 1) * layerOverInput._x) - 1;
-		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth() + 1) * layerOverInput._y) - 1;
+		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
+		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
 
 		int wi = 0;
 
@@ -152,8 +153,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	// Update Q
 	for (int i = 0; i < _qNodes.size(); i++) {
-		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth() + 1) * layerOverInput._x) - 1;
-		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth() + 1) * layerOverInput._y) - 1;
+		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
+		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
 
 		int wi = 0;
 
@@ -166,7 +167,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int j = x + y * _htfe.getLayerDescs().front()._width;
 
 					_qNodes[i]._connections[wi]._weight += alphaQ * tdError * _qNodes[i]._connections[wi]._trace;
-					_qNodes[i]._connections[wi]._trace = std::max<float>((1.0f - traceDecay) * _qNodes[i]._connections[wi]._trace, firstHidden[j]);
+					_qNodes[i]._connections[wi]._trace = std::max<float>((1.0f - qTraceDecay) * _qNodes[i]._connections[wi]._trace, firstHidden[j]);
 				}
 
 				wi++;
@@ -178,8 +179,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	for (int i = 0; i < _actionNodes.size(); i++) {
 		float sum = 0.0f;
 
-		int cx = std::round((_actionNodes[i]._index % _htfe.getInputWidth() + 1) * layerOverInput._x) - 1;
-		int cy = std::round((_actionNodes[i]._index / _htfe.getInputWidth() + 1) * layerOverInput._y) - 1;
+		int cx = std::round((_actionNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
+		int cy = std::round((_actionNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
 
 		int wi = 0;
 
@@ -207,11 +208,11 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	// ----------------------------------- Update Action -----------------------------------
 
-	float aAlpha = alphaAction * tdError;
+	float aAlpha = alphaAction * std::max<float>(0.0f, tdError);
 
 	for (int i = 0; i < _actionNodes.size(); i++) {
-		int cx = std::round((_actionNodes[i]._index % _htfe.getInputWidth() + 1) * layerOverInput._x) - 1;
-		int cy = std::round((_actionNodes[i]._index / _htfe.getInputWidth() + 1) * layerOverInput._y) - 1;
+		int cx = std::round((_actionNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
+		int cy = std::round((_actionNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
 
 		int wi = 0;
 
@@ -224,14 +225,12 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int j = x + y * _htfe.getLayerDescs().front()._width;
 
 					_actionNodes[i]._connections[wi]._weight += aAlpha * _actionNodes[i]._connections[wi]._trace;
-					_actionNodes[i]._connections[wi]._trace = (1.0f - traceDecay) * _actionNodes[i]._connections[wi]._trace + (_actionNodes[i]._output - _actionNodes[i]._maxOutput) * firstHidden[j];
+					_actionNodes[i]._connections[wi]._trace = (1.0f - actionTraceDecay) * _actionNodes[i]._connections[wi]._trace + actionTraceBeta * std::exp(-std::abs(_actionNodes[i]._connections[wi]._trace) * actionTraceTemperature) * (_actionNodes[i]._output - _actionNodes[i]._maxOutput) * firstHidden[j];
 				}
 
 				wi++;
 			}
 	}
-
-	_prevValue = nextQ;
 
 	std::cout << nextQ << " " << tdError << " " << _actionNodes[0]._output << std::endl;
 
@@ -245,8 +244,42 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	// -------------------------------- Update Input --------------------------------
 	// ------------------------------------------------------------------------------
 
+	// Recompute nextQ
+	nextQ = 0.0f;
+
+	for (int i = 0; i < _qNodes.size(); i++) {
+		float sum = 0.0f;
+
+		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
+		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
+
+		int wi = 0;
+
+		for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
+			for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+				int x = cx + dx;
+				int y = cy + dy;
+
+				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
+					int j = x + y * _htfe.getLayerDescs().front()._width;
+
+					sum += _qNodes[i]._connections[wi]._weight * firstHidden[j];
+				}
+
+				wi++;
+			}
+
+		_qNodes[i]._output = sum;
+
+		nextQ += _qNodes[i]._output;
+	}
+
+	nextQ /= _qNodes.size();
+
+	_prevValue = nextQ;
+
 	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = newQ;
+		_input[_qNodes[i]._index] = nextQ;
 
 	for (int i = 0; i < _actionNodes.size(); i++)
 		_input[_actionNodes[i]._index] = _actionNodes[i]._output;
@@ -256,7 +289,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr<sf::Image>> &images, unsigned long seed) const {
 	std::mt19937 generator(seed);
-	
+
 	int maxWidth = _htfe.getInputWidth();
 	int maxHeight = _htfe.getInputHeight();
 
@@ -264,7 +297,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 		maxWidth = std::max<int>(maxWidth, _htfe.getLayerDescs()[l]._width);
 		maxHeight = std::max<int>(maxHeight, _htfe.getLayerDescs()[l]._height);
 	}
-	
+
 	std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
 
 	if (sf::Keyboard::isKeyPressed(sf::Keyboard::P)) {
@@ -295,13 +328,13 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 			for (int x = 0; x < _htfe.getInputWidth(); x++)
 				for (int y = 0; y < _htfe.getInputHeight(); y++) {
-				sf::Color color;
+					sf::Color color;
 
-				color = c;
+					color = c;
 
-				color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getInputWidth())])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getInputWidth())])) * (255.0f - 3.0f) + 3;
 
-				image->setPixel(x - _htfe.getInputWidth() / 2 + maxWidth / 2, y - _htfe.getInputHeight() / 2 + maxHeight / 2, color);
+					image->setPixel(x - _htfe.getInputWidth() / 2 + maxWidth / 2, y - _htfe.getInputHeight() / 2 + maxHeight / 2, color);
 				}
 
 			images.push_back(image);
@@ -333,13 +366,13 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 			for (int x = 0; x < _htfe.getInputWidth(); x++)
 				for (int y = 0; y < _htfe.getInputHeight(); y++) {
-				sf::Color color;
+					sf::Color color;
 
-				color = c;
+					color = c;
 
-				color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getInputWidth())])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getInputWidth())])) * (255.0f - 3.0f) + 3;
 
-				image->setPixel(x - _htfe.getInputWidth() / 2 + maxWidth / 2, y - _htfe.getInputHeight() / 2 + maxHeight / 2, color);
+					image->setPixel(x - _htfe.getInputWidth() / 2 + maxWidth / 2, y - _htfe.getInputHeight() / 2 + maxHeight / 2, color);
 				}
 
 			images.push_back(image);

@@ -20,7 +20,7 @@ struct Float4 {
 struct Int2 {
 	int _x, _y;
 };
-	
+
 void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, float minInitWeight, float maxInitWeight) {
 	std::mt19937 generator(time(nullptr));
 
@@ -72,7 +72,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		int numFeedBackWeights = std::pow(_layerDescs[l]._feedBackConnectionRadius * 2 + 1, 2);
 
 		_layers[l]._hiddenFeedForwardActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
-		
+
 		_layers[l]._hiddenFeedBackActivations = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenFeedBackActivationsPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
@@ -124,6 +124,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		initializeLayerHiddenKernel.setArg(index++, initSeedHidden);
 		initializeLayerHiddenKernel.setArg(index++, _layerDescs[l]._sparsity);
 		initializeLayerHiddenKernel.setArg(index++, _layerDescs[l]._lateralScalar);
+		initializeLayerHiddenKernel.setArg(index++, _layerDescs[l]._feedBackScalar);
 		initializeLayerHiddenKernel.setArg(index++, minInitWeight);
 		initializeLayerHiddenKernel.setArg(index++, maxInitWeight);
 
@@ -287,7 +288,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
 }
 
-void HTFE::activate(sys::ComputeSystem &cs) {	
+void HTFE::activate(sys::ComputeSystem &cs) {
 	{
 		cl::size_t<3> origin;
 		origin[0] = 0;
@@ -301,7 +302,7 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 
 		cs.getQueue().enqueueWriteImage(_inputImage, CL_TRUE, origin, region, 0, 0, _input.data());
 	}
-	
+
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	// ------------------------------------------------------------------------------
@@ -363,12 +364,10 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		index = 0;
 
 		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenFeedForwardActivations);
-		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenStatesFeedForwardPrev);
 		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenStatesFeedForward);
 		_layerHiddenInhibitKernel.setArg(index++, layerSize);
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._inhibitionRadius);
 		_layerHiddenInhibitKernel.setArg(index++, localActivity);
-		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
@@ -469,12 +468,10 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		index = 0;
 
 		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
-		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 		_layerHiddenInhibitKernel.setArg(index++, _layers[l]._hiddenStatesFeedBack);
 		_layerHiddenInhibitKernel.setArg(index++, layerSize);
 		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._inhibitionRadius);
 		_layerHiddenInhibitKernel.setArg(index++, localActivity);
-		_layerHiddenInhibitKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
@@ -599,7 +596,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._sparsity);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, alphas);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._gamma);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 		}
@@ -634,7 +631,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._sparsity);
 			_layerHiddenWeightUpdateKernel.setArg(index++, alphas);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._gamma);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenWeightUpdateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 		}
@@ -678,7 +675,7 @@ void HTFE::stepEnd() {
 		std::swap(_layers[l]._visibleReconstruction, _layers[l]._visibleReconstructionPrev);
 		std::swap(_layers[l]._hiddenFeedBackActivations, _layers[l]._hiddenFeedBackActivationsPrev);
 		std::swap(_layers[l]._hiddenStatesFeedForward, _layers[l]._hiddenStatesFeedForwardPrev);
-		
+
 		temp2D = _layers[l]._hiddenStatesFeedBackPrevPrev;
 		_layers[l]._hiddenStatesFeedBackPrevPrev = _layers[l]._hiddenStatesFeedBackPrev;
 		_layers[l]._hiddenStatesFeedBackPrev = _layers[l]._hiddenStatesFeedBack;

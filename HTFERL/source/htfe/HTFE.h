@@ -28,15 +28,15 @@ namespace htfe {
 		float _feedBackAlpha;
 		float _hiddenBiasAlpha;
 		float _reconstructionAlpha;
-		float _gamma;
 		float _lateralScalar;
+		float _feedBackScalar;
 		float _minDerivative;
 
 		LayerDesc()
-			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(8), _lateralConnectionRadius(5), _inhibitionRadius(4), _feedBackConnectionRadius(6),
-			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.2f), _lateralAlpha(0.2f), _feedBackAlpha(0.2f), _hiddenBiasAlpha(0.2f), _reconstructionAlpha(0.2f),
-			_gamma(0.0f), _lateralScalar(0.5f), _minDerivative(0.0f)
+			: _width(16), _height(16), _receptiveFieldRadius(5), _reconstructionRadius(9), _lateralConnectionRadius(7), _inhibitionRadius(5), _feedBackConnectionRadius(7),
+			_sparsity(3.01f / 121.0f), _dutyCycleDecay(0.01f),
+			_feedForwardAlpha(0.01f), _lateralAlpha(0.005f), _feedBackAlpha(0.01f), _hiddenBiasAlpha(0.005f), _reconstructionAlpha(0.008f),
+			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.003f)
 		{}
 	};
 
@@ -73,7 +73,7 @@ namespace htfe {
 		cl::Image2D _visibleReconstruction;
 		cl::Image2D _visibleReconstructionPrev;
 	};
-		
+
 	class HTFE {
 	private:
 		int _inputWidth, _inputHeight;
@@ -98,7 +98,7 @@ namespace htfe {
 
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, float minInitWeight, float maxInitWeight);
-	
+
 		void activate(sys::ComputeSystem &cs);
 		void learn(sys::ComputeSystem &cs);
 		void stepEnd();
