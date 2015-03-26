@@ -144,17 +144,17 @@ int main() {
 	layerDescs[0]._width = 128;
 	layerDescs[0]._height = 128;
 
-	layerDescs[1]._width = 88;
-	layerDescs[1]._height = 88;
+	layerDescs[1]._width = 100;
+	layerDescs[1]._height = 100;
 
-	layerDescs[2]._width = 64;
-	layerDescs[2]._height = 64;
+	layerDescs[2]._width = 88;
+	layerDescs[2]._height = 88;
 
-	layerDescs[3]._width = 40;
-	layerDescs[3]._height = 40;
+	layerDescs[3]._width = 70;
+	layerDescs[3]._height = 70;
 
-	layerDescs[4]._width = 30;
-	layerDescs[4]._height = 30;
+	layerDescs[4]._width = 64;
+	layerDescs[4]._height = 64;
 
 	std::vector<htferl::HTFERL::InputType> inputTypes(64 * 64, htferl::HTFERL::_state);
 
@@ -173,7 +173,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}*/
 
-	for (int i = 0; i < 1; i++) {
+	for (int i = 0; i < 4; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -185,7 +185,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 8; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -292,7 +292,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward * 0.05f, 0.7f, 0.995f, 0.05f, 0.05f, 0.011f, 0.12f, 0.005f, 0.005f, 1.0f, 1.0f, generator);
+		agent.step(cs, reward * 0.1f, 0.6f, 0.995f, 0.05f, 0.03f, 0.05f, 0.05f, 0.01f, 0.01f, 0.5f, 1.0f, generator);
 
 		float output = 0.0f;
 		int c = 0;

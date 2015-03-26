@@ -33,10 +33,10 @@ namespace htfe {
 		float _minDerivative;
 
 		LayerDesc()
-			: _width(16), _height(16), _receptiveFieldRadius(5), _reconstructionRadius(9), _lateralConnectionRadius(7), _inhibitionRadius(5), _feedBackConnectionRadius(7),
-			_sparsity(3.01f / 121.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.01f), _lateralAlpha(0.005f), _feedBackAlpha(0.01f), _hiddenBiasAlpha(0.005f), _reconstructionAlpha(0.008f),
-			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.003f)
+			: _width(16), _height(16), _receptiveFieldRadius(5), _reconstructionRadius(8), _lateralConnectionRadius(7), _inhibitionRadius(4), _feedBackConnectionRadius(7),
+			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
+			_feedForwardAlpha(0.04f), _lateralAlpha(0.04f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.03f), _reconstructionAlpha(0.015f),
+			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.005f)
 		{}
 	};
 
