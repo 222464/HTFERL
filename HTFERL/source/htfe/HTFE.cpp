@@ -83,6 +83,9 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		_layers[l]._hiddenStatesFeedBackPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 		_layers[l]._hiddenStatesFeedBackPrevPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
 
+		_layers[l]._blurPing = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._blurPong = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+
 		_layers[l]._feedForwardWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
 		_layers[l]._feedForwardWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedForwardWeights);
 
@@ -286,6 +289,8 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 	_layerHiddenWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdate");
 	_layerHiddenWeightUpdateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdateLast");
 	_layerVisibleWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerVisibleWeightUpdate");
+	_gaussianBlurXKernel = cl::Kernel(program.getProgram(), "gaussianBlurX");
+	_gaussianBlurYKernel = cl::Kernel(program.getProgram(), "gaussianBlurY");
 }
 
 void HTFE::activate(sys::ComputeSystem &cs) {
@@ -370,6 +375,24 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		_layerHiddenInhibitKernel.setArg(index++, localActivity);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+
+		// Blur the inhibited results
+		gaussianBlur(cs, _layers[l]._hiddenStatesFeedForward, _layers[l]._blurPing, _layers[l]._blurPong, _layerDescs[l]._width, _layerDescs[l]._height, _layerDescs[l]._numBlurPasses, _layerDescs[l]._blurKernelWidth);
+
+		// Copy back to hiddenStatesFeedForward
+		{
+			cl::size_t<3> origin;
+			origin[0] = 0;
+			origin[1] = 0;
+			origin[2] = 0;
+
+			cl::size_t<3> region;
+			region[0] = _layerDescs[l]._width;
+			region[1] = _layerDescs[l]._height;
+			region[2] = 1;
+
+			cs.getQueue().enqueueCopyImage(_layers[l]._blurPong, _layers[l]._hiddenStatesFeedForward, origin, origin, region);
+		}
 
 		pPrevLayer = &_layers[l]._hiddenStatesFeedForward;
 		prevWidth = _layerDescs[l]._width;
@@ -714,4 +737,41 @@ void HTFE::clearMemory(sys::ComputeSystem &cs) {
 		cs.getQueue().enqueueFillImage(_layers[l]._hiddenStatesFeedBackPrev, clear, origin, region);
 		cs.getQueue().enqueueFillImage(_layers[l]._hiddenStatesFeedBack, clear, origin, region);
 	}
+}
+
+void HTFE::gaussianBlur(sys::ComputeSystem &cs, cl::Image2D &source, cl::Image2D &ping, cl::Image2D &pong, int imageSizeX, int imageSizeY, int passes, float kernelWidth) {
+	Float2 imageSizeInv;
+	imageSizeInv._x = 1.0f / imageSizeX;
+	imageSizeInv._y = 1.0f / imageSizeY;
+
+	// Blur source to ping
+	_gaussianBlurXKernel.setArg(0, source);
+	_gaussianBlurXKernel.setArg(1, ping);
+	_gaussianBlurXKernel.setArg(2, imageSizeInv);
+	_gaussianBlurXKernel.setArg(3, kernelWidth * imageSizeInv._x);
+
+	cs.getQueue().enqueueNDRangeKernel(_gaussianBlurXKernel, cl::NullRange, cl::NDRange(imageSizeX, imageSizeY));
+
+	for (int p = 0; p < passes - 1; p++) {
+		_gaussianBlurYKernel.setArg(0, ping);
+		_gaussianBlurYKernel.setArg(1, pong);
+		_gaussianBlurYKernel.setArg(2, imageSizeInv);
+		_gaussianBlurYKernel.setArg(3, kernelWidth * imageSizeInv._y);
+
+		cs.getQueue().enqueueNDRangeKernel(_gaussianBlurYKernel, cl::NullRange, cl::NDRange(imageSizeX, imageSizeY));
+
+		_gaussianBlurXKernel.setArg(0, pong);
+		_gaussianBlurXKernel.setArg(1, ping);
+		_gaussianBlurXKernel.setArg(2, imageSizeInv);
+		_gaussianBlurXKernel.setArg(3, kernelWidth * imageSizeInv._x);
+
+		cs.getQueue().enqueueNDRangeKernel(_gaussianBlurXKernel, cl::NullRange, cl::NDRange(imageSizeX, imageSizeY));
+	}
+
+	_gaussianBlurYKernel.setArg(0, ping);
+	_gaussianBlurYKernel.setArg(1, pong);
+	_gaussianBlurYKernel.setArg(2, imageSizeInv);
+	_gaussianBlurYKernel.setArg(3, kernelWidth * imageSizeInv._y);
+
+	cs.getQueue().enqueueNDRangeKernel(_gaussianBlurYKernel, cl::NullRange, cl::NDRange(imageSizeX, imageSizeY));
 }

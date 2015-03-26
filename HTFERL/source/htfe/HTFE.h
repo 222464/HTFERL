@@ -31,12 +31,14 @@ namespace htfe {
 		float _lateralScalar;
 		float _feedBackScalar;
 		float _minDerivative;
+		float _blurKernelWidth;
+		int _numBlurPasses;
 
 		LayerDesc()
 			: _width(16), _height(16), _receptiveFieldRadius(5), _reconstructionRadius(8), _lateralConnectionRadius(7), _inhibitionRadius(4), _feedBackConnectionRadius(7),
 			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.04f), _lateralAlpha(0.04f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.03f), _reconstructionAlpha(0.015f),
-			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.005f)
+			_feedForwardAlpha(0.1f), _lateralAlpha(0.05f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.03f), _reconstructionAlpha(0.02f),
+			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.008f), _blurKernelWidth(1.0f), _numBlurPasses(1)
 		{}
 	};
 
@@ -51,6 +53,9 @@ namespace htfe {
 		cl::Image2D _hiddenStatesFeedBack;
 		cl::Image2D _hiddenStatesFeedBackPrev;
 		cl::Image2D _hiddenStatesFeedBackPrevPrev;
+
+		cl::Image2D _blurPing;
+		cl::Image2D _blurPong;
 
 		cl::Image3D _feedForwardWeights;
 		cl::Image3D _feedForwardWeightsPrev;
@@ -88,13 +93,16 @@ namespace htfe {
 		cl::Kernel _layerHiddenWeightUpdateKernel;
 		cl::Kernel _layerHiddenWeightUpdateLastKernel;
 		cl::Kernel _layerVisibleWeightUpdateKernel;
-		cl::Kernel _layerUpdateQKernel;
+		cl::Kernel _gaussianBlurXKernel;
+		cl::Kernel _gaussianBlurYKernel;
 
 		std::vector<float> _input;
 		std::vector<float> _prediction;
 
 		cl::Image2D _inputImage;
 		cl::Image2D _inputImagePrev;
+
+		void gaussianBlur(sys::ComputeSystem &cs, cl::Image2D &source, cl::Image2D &ping, cl::Image2D &pong, int imageSizeX, int imageSizeY, int passes, float kernelWidth);
 
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, float minInitWeight, float maxInitWeight);
