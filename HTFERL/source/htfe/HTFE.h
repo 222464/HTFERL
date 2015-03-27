@@ -28,6 +28,11 @@ namespace htfe {
 		float _feedBackAlpha;
 		float _hiddenBiasAlpha;
 		float _reconstructionAlpha;
+		float _feedForwardMomentum;
+		float _lateralMomentum;
+		float _feedBackMomentum;
+		float _hiddenBiasMomentum;
+		float _reconstructionMomentum;
 		float _lateralScalar;
 		float _feedBackScalar;
 		float _minDerivative;
@@ -35,10 +40,11 @@ namespace htfe {
 		int _numBlurPasses;
 
 		LayerDesc()
-			: _width(16), _height(16), _receptiveFieldRadius(5), _reconstructionRadius(8), _lateralConnectionRadius(7), _inhibitionRadius(4), _feedBackConnectionRadius(7),
-			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.1f), _lateralAlpha(0.05f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.03f), _reconstructionAlpha(0.02f),
-			_lateralScalar(0.01f), _feedBackScalar(0.01f), _minDerivative(0.008f), _blurKernelWidth(1.0f), _numBlurPasses(1)
+			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(6), _lateralConnectionRadius(5), _inhibitionRadius(4), _feedBackConnectionRadius(6),
+			_sparsity(3.01f / 81.0f), _dutyCycleDecay(0.01f),
+			_feedForwardAlpha(0.01f), _lateralAlpha(0.05f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.01f), _reconstructionAlpha(0.01f),
+			_feedForwardMomentum(0.5f), _lateralMomentum(0.5f), _feedBackMomentum(0.5f), _hiddenBiasMomentum(0.5f), _reconstructionMomentum(0.5f),
+			_lateralScalar(0.05f), _feedBackScalar(0.05f), _minDerivative(0.001f), _blurKernelWidth(1.0f), _numBlurPasses(1)
 		{}
 	};
 

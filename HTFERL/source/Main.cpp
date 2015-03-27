@@ -173,7 +173,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}*/
 
-	for (int i = 0; i < 4; i++) {
+	for (int i = 0; i < 1; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -185,7 +185,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}
 
-	for (int i = 0; i < 8; i++) {
+	for (int i = 0; i < 6; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -292,7 +292,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward * 0.1f, 0.6f, 0.995f, 0.05f, 0.03f, 0.05f, 0.05f, 0.01f, 0.01f, 0.5f, 1.0f, generator);
+		agent.step(cs, reward * 0.05f, 0.5f, 0.994f, 0.1f, 0.1f, 0.01f, 0.01f, 0.01f, 0.01f, 0.5f, 1.0f, 400, 300, generator);
 
 		float output = 0.0f;
 		int c = 0;

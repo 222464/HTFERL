@@ -24,10 +24,10 @@ namespace htferl {
 	private:
 		struct OutputConnection {
 			float _weight;
-			float _trace;
+			//float _trace;
 
 			OutputConnection()
-				: _trace(0.0f)
+			//	: _trace(0.0f)
 			{}
 		};
 
@@ -62,8 +62,6 @@ namespace htferl {
 
 			float _q;
 			float _originalQ;
-
-			float _tdError;
 		};
 
 		std::vector<float> _input;
@@ -76,10 +74,16 @@ namespace htferl {
 
 		htfe::HTFE _htfe;
 
+		std::list<ReplaySample> _replaySamples;
+
+		std::vector<float> _actionPrev;
+		std::vector<float> _maxActionPrev;
+		std::vector<float> _hiddenStatesPrev;
+
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
-		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, std::mt19937 &generator);
+		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, int replayChainSize, int replayCount, std::mt19937 &generator);
 
 		int getInputWidth() const {
 			return _htfe.getInputWidth();

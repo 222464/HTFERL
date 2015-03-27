@@ -247,7 +247,7 @@ void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only 
 void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev, read_only image2d_t nextLayerHiddenStatesPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev, read_only image3d_t feedBackWeightsPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases, write_only image3d_t feedBackWeights,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float4 alpha, float minDerivative)
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius, int feedBackRadius, int reconstructionReceptiveRadius, float sparsity, float4 alpha, float4 momenta, float minDerivative)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -306,11 +306,12 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 				float eligibility = error * input;
 
-				float prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha.x * eligibility;
+				float newWeight = prevWeight.x + alpha.x * eligibility + momenta.x * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -327,11 +328,12 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 				float eligibility = error * input;
 
-				float prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha.y * eligibility;
+				float newWeight = prevWeight.x + alpha.x * eligibility + momenta.y * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -348,11 +350,12 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 				float eligibility = error * next;
 
-				float prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha.z * eligibility;
+				float newWeight = prevWeight.x + alpha.x * eligibility + momenta.z * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -360,17 +363,18 @@ void kernel layerHiddenWeightUpdate(read_only image2d_t visibleReconstruction, r
 
 	float eligibility = error;
 
-	float prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).x;
+	float2 prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).xy;
 
-	float newBias = prevBias + alpha.w * eligibility;
+	float newBias = prevBias.x + alpha.w * eligibility + momenta.w * prevBias.y;
+	float newDelta = newBias - prevBias.x;
 
-	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, newDelta, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t inputsPrev, read_only image2d_t feedBackActivationsPrev, read_only image2d_t hiddenStatesPrev, read_only image2d_t hiddenStatesPrevPrev,
 	read_only image3d_t reconstructionWeightsPrev, read_only image3d_t feedForwardWeightsPrev, read_only image3d_t lateralWeightsPrev, read_only image2d_t hiddenBiasesPrev,
 	write_only image3d_t feedForwardWeights, write_only image3d_t lateralWeights, write_only image2d_t hiddenBiases,
-	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float4 alpha, float minDerivative)
+	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int receptiveFieldRadius, int lateralConnectionRadius, int reconstructionReceptiveRadius, float sparsity, float4 alpha, float4 momenta, float minDerivative)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -427,11 +431,12 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 
 				float eligibility = error * input;
 
-				float prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha.x * eligibility;
+				float newWeight = prevWeight.x + alpha.x * eligibility + momenta.x * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -448,11 +453,12 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 
 				float eligibility = error * input;
 
-				float prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha.y * eligibility;
+				float newWeight = prevWeight.x + alpha.x * eligibility + momenta.y * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -460,15 +466,16 @@ void kernel layerHiddenWeightUpdateLast(read_only image2d_t visibleReconstructio
 
 	float eligibility = error;
 
-	float prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).x;
+	float2 prevBias = read_imagef(hiddenBiasesPrev, hiddenPosition).xy;
 
-	float newBias = prevBias + alpha.w * eligibility;
+	float newBias = prevBias.x + alpha.w * eligibility + momenta.w * prevBias.y;
+	float newDelta = newBias - prevBias.x;
 
-	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenBiases, hiddenPosition, (float4)(newBias, newDelta, 0.0f, 0.0f));
 }
 
 void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, read_only image2d_t inputs, read_only image2d_t hiddenStatesPrev, read_only image3d_t reconstructionWeightsPrev, read_only image2d_t visibleBiasesPrev, write_only image3d_t reconstructionWeights, write_only image2d_t visibleBiases,
-	int reconstructionReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, float alpha)
+	int reconstructionReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, float alpha, float momentum)
 {
 	int2 visiblePosition = (int2)(get_global_id(0), get_global_id(1));
 	float2 layerPositionNormalized = (float2)(visiblePosition.x * inputSizeMinusOneInv.x, visiblePosition.y * inputSizeMinusOneInv.y);
@@ -490,11 +497,12 @@ void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, 
 
 				float eligibility = error * source;
 
-				float prevWeight = read_imagef(reconstructionWeightsPrev, (int4)(visiblePosition.x, visiblePosition.y, wi, 0)).x;
+				float2 prevWeight = read_imagef(reconstructionWeightsPrev, (int4)(visiblePosition.x, visiblePosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight + alpha * eligibility;
+				float newWeight = prevWeight.x + alpha * eligibility + momentum * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
 
-				write_imagef(reconstructionWeights, (int4)(visiblePosition.x, visiblePosition.y, wi, 0), (float4)(newWeight, 0.0f, 0.0f, 0.0f));
+				write_imagef(reconstructionWeights, (int4)(visiblePosition.x, visiblePosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
 			}
 
 			wi++;
@@ -502,9 +510,10 @@ void kernel layerVisibleWeightUpdate(read_only image2d_t visibleReconstruction, 
 
 	float eligibility = error;
 
-	float prevBias = read_imagef(visibleBiasesPrev, visiblePosition).x;
+	float2 prevBias = read_imagef(visibleBiasesPrev, visiblePosition).xy;
 
-	float newBias = prevBias + alpha * eligibility;
+	float newBias = prevBias.x + alpha * eligibility + momentum * prevBias.y;
+	float newDelta = newBias - prevBias.x;
 
 	write_imagef(visibleBiases, visiblePosition, (float4)(newBias, 0.0f, 0.0f, 0.0f));
 }
