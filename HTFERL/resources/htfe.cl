@@ -105,7 +105,7 @@ void kernel initializeLayerVisible(write_only image2d_t visibleReconstruction, w
 }
 
 void kernel layerHiddenFeedForwardActivate(read_only image2d_t inputs, read_only image3d_t feedForwardWeights, write_only image2d_t hiddenFeedForwardActivations,
-	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius, int lateralConnectionRadius)
+	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -231,6 +231,107 @@ void kernel layerHiddenInhibit(read_only image2d_t hiddenActivations, write_only
 	float newState = numHigher < localActivity ? 1.0f : 0.0f;
 
 	write_imagef(hiddenStates, hiddenPosition, (float4)(newState, 0.0f, 0.0f, 0.0f));
+}
+
+void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeights, write_only image2d_t spatialReconstruction,
+	int receptiveRadius, int2 reverseReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv)
+{
+	int2 visiblePosition = (int2)(get_global_id(0), get_global_id(1));
+	float2 layerPositionNormalized = (float2)(visiblePosition.x * inputSizeMinusOneInv.x, visiblePosition.y * inputSizeMinusOneInv.y);
+	int2 layerPositionCenter = (int2)(layerPositionNormalized.x * layerSizeMinusOne.x, layerPositionNormalized.y * layerSizeMinusOne.y);
+
+	float sum = 0.0f;
+
+	for (int dx = -reverseReceptiveRadius.x; dx <= reverseReceptiveRadius.x; dx++)
+		for (int dy = -reverseReceptiveRadius.y; dy <= reverseReceptiveRadius.y; dy++) {
+			int2 layerPosition = (int2)(layerPositionCenter.x + dx, layerPositionCenter.y + dy);
+
+			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
+				// Next layer node's receptive field
+				int2 fieldCenter = (int2)(layerPosition.x * layerSizeMinusOneInv.x * inputSizeMinusOne.x, layerPosition.y * layerSizeMinusOneInv.y * inputSizeMinusOne.y);
+
+				int2 fieldLowerBounds = fieldCenter - (int2)(receptiveRadius);
+				int2 fieldUpperBounds = fieldCenter + (int2)(receptiveRadius);
+
+				// Check for containment
+				if (visiblePosition.x >= fieldLowerBounds.x && visiblePosition.x <= fieldUpperBounds.x && visiblePosition.y >= fieldLowerBounds.y && visiblePosition.y <= fieldUpperBounds.y) {
+					int rdx = visiblePosition.x - fieldLowerBounds.x;
+					int rdy = visiblePosition.y - fieldLowerBounds.y;
+
+					float input = read_imagef(hiddenStates, layerPosition).x;
+					
+					int weightIndex = rdy + rdx * (receptiveRadius * 2 + 1);
+
+					float weight = read_imagef(feedForwardWeights, (int4)(layerPosition.x, layerPosition.y, weightIndex, 0)).x;
+
+					sum += input * weight;
+				}
+			}
+		}
+
+	write_imagef(spatialReconstruction, visiblePosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
+}
+
+void kernel layerUpdateFeedForwardWeights(read_only image2d_t inputs, read_only image2d_t spatialReconstruction, read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeightsPrev, write_only image3d_t feedForwardWeights,
+	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius, float alpha, float momentum)
+{
+	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
+
+	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
+	int2 inputCenterPosition = (int2)(inputCenterPositionNormalized.x * inputSizeMinusOne.x, inputCenterPositionNormalized.y * inputSizeMinusOne.y);
+
+	float hiddenState = read_imagef(hiddenStates, hiddenPosition).x;
+
+	float sum = 0.0f;
+
+	int wi = 0;
+
+	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
+		for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
+			int2 inputPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
+
+			if (inputPosition.x >= 0 && inputPosition.x < inputSize.x && inputPosition.y >= 0 && inputPosition.y < inputSize.y) {
+				float input = read_imagef(inputs, inputPosition).x;
+				float recon = read_imagef(spatialReconstruction, inputPosition).x;
+
+				float weight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+
+				sum += (input - recon) * weight;
+			}
+
+			wi++;
+		}
+
+	wi = 0;
+
+	for (int dx = -receptiveFieldRadius; dx <= receptiveFieldRadius; dx++)
+		for (int dy = -receptiveFieldRadius; dy <= receptiveFieldRadius; dy++) {
+			int2 inputPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
+
+			if (inputPosition.x >= 0 && inputPosition.x < inputSize.x && inputPosition.y >= 0 && inputPosition.y < inputSize.y) {
+				float input = read_imagef(inputs, inputPosition).x;
+				float recon = read_imagef(spatialReconstruction, inputPosition).x;
+
+				float eligibility = 0.5f * ((input - recon) * hiddenState + sum * input);
+
+				float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+
+				float newWeight = prevWeight.x + alpha * eligibility + momentum * prevWeight.y;
+				float newDelta = newWeight - prevWeight.x;
+
+				write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
+			}
+
+			wi++;
+		}
+
+	// Bias
+	float2 prevBias = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
+
+	float newBias = prevBias.x + alpha * sum + momentum * prevBias.y;
+	float newDelta = newBias - prevBias.x;
+
+	write_imagef(feedForwardWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newBias, newDelta, 0.0f, 0.0f));
 }
 
 void kernel layerVisibleReconstruct(read_only image2d_t hiddenStates, read_only image3d_t reconstructionWeights, write_only image2d_t visibleReconstruction,

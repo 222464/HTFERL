@@ -102,6 +102,8 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		_layers[l]._feedBackWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedBackWeights);
 		_layers[l]._feedBackWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numFeedBackWeights);
 
+		_layers[l]._spatialReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
+
 		_layers[l]._visibleReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 		_layers[l]._visibleReconstructionPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 
@@ -173,6 +175,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 			region[2] = 1;
 
 			cs.getQueue().enqueueCopyImage(_layers[l]._visibleReconstruction, _layers[l]._visibleReconstructionPrev, origin, origin, region);
+			cs.getQueue().enqueueCopyImage(_layers[l]._visibleReconstruction, _layers[l]._spatialReconstruction, origin, origin, region);
 		}
 
 		{
@@ -269,6 +272,8 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 	_layerHiddenFeedForwardActivateKernel = cl::Kernel(program.getProgram(), "layerHiddenFeedForwardActivate");
 	_layerHiddenFeedBackActivateKernel = cl::Kernel(program.getProgram(), "layerHiddenFeedBackActivate");
 	_layerHiddenInhibitKernel = cl::Kernel(program.getProgram(), "layerHiddenInhibit");
+	_layerSpatialReconstructKernel = cl::Kernel(program.getProgram(), "layerSpatialReconstruct");
+	_layerUpdateFeedForwardWeightsKernel = cl::Kernel(program.getProgram(), "layerUpdateFeedForwardWeights");
 	_layerVisibleReconstructKernel = cl::Kernel(program.getProgram(), "layerVisibleReconstruct");
 	_layerHiddenWeightUpdateKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdate");
 	_layerHiddenWeightUpdateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenWeightUpdateLast");
@@ -341,7 +346,6 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, inputSize);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, inputSizeMinusOne);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
-		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenFeedForwardActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
@@ -557,6 +561,14 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		inputSizeMinusOneInv._x = 1.0f / (prevWidth - 1);
 		inputSizeMinusOneInv._y = 1.0f / (prevHeight - 1);
 
+		Int2 reverseReconstructionReceptiveRadius;
+		reverseReconstructionReceptiveRadius._x = std::ceil(static_cast<float>(prevWidth) / static_cast<float>(_layerDescs[l]._width) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
+		reverseReconstructionReceptiveRadius._y = std::ceil(static_cast<float>(prevHeight) / static_cast<float>(_layerDescs[l]._height) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
+
+		Int2 reverseReceptiveRadius;
+		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._width) / static_cast<float>(prevWidth) * static_cast<float>(_layerDescs[l]._receptiveFieldRadius));
+		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._height) / static_cast<float>(prevHeight)* static_cast<float>(_layerDescs[l]._receptiveFieldRadius));
+
 		Int2 nextSize;
 		Int2 nextSizeMinusOne;
 
@@ -573,23 +585,55 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 
 		// ------------------------------- Weight Updates -------------------------------
 
+		int index = 0;
+
+		// Spatial reconstruction and weight update
+
+		_layerSpatialReconstructKernel.setArg(index++, _layers[l]._hiddenStatesFeedForwardPrev);
+		_layerSpatialReconstructKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+		_layerSpatialReconstructKernel.setArg(index++, _layers[l]._spatialReconstruction);
+		_layerSpatialReconstructKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+		_layerSpatialReconstructKernel.setArg(index++, reverseReceptiveRadius);
+		_layerSpatialReconstructKernel.setArg(index++, inputSizeMinusOne);
+		_layerSpatialReconstructKernel.setArg(index++, inputSizeMinusOneInv);
+		_layerSpatialReconstructKernel.setArg(index++, layerSize);
+		_layerSpatialReconstructKernel.setArg(index++, layerSizeMinusOne);
+		_layerSpatialReconstructKernel.setArg(index++, layerSizeMinusOneInv);
+
+		cs.getQueue().enqueueNDRangeKernel(_layerSpatialReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
+
+		index = 0;
+
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, *pPrevLayer);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layers[l]._spatialReconstruction);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layers[l]._hiddenStatesFeedForwardPrev);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layers[l]._feedForwardWeights);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, layerSize);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, layerSizeMinusOneInv);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, inputSize);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, inputSizeMinusOne);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layerDescs[l]._feedForwardAlpha);
+		_layerUpdateFeedForwardWeightsKernel.setArg(index++, _layerDescs[l]._feedForwardMomentum);
+
+		cs.getQueue().enqueueNDRangeKernel(_layerUpdateFeedForwardWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
+
+		// Temporal reconstruction and weight update
+		
 		Float4 alphas;
-		alphas._x = _layerDescs[l]._feedForwardAlpha;
+		alphas._x = _layerDescs[l]._predictiveAlpha;
 		alphas._y = _layerDescs[l]._lateralAlpha;
 		alphas._z = _layerDescs[l]._feedBackAlpha;
 		alphas._w = _layerDescs[l]._hiddenBiasAlpha;
 
 		Float4 momenta;
-		momenta._x = _layerDescs[l]._feedForwardMomentum;
+		momenta._x = _layerDescs[l]._predictiveMomentum;
 		momenta._y = _layerDescs[l]._lateralMomentum;
 		momenta._z = _layerDescs[l]._feedBackMomentum;
 		momenta._w = _layerDescs[l]._hiddenBiasMomentum;
 
-		Int2 reverseReconstructionReceptiveRadius;
-		reverseReconstructionReceptiveRadius._x = std::ceil(static_cast<float>(prevWidth) / static_cast<float>(_layerDescs[l]._width) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
-		reverseReconstructionReceptiveRadius._y = std::ceil(static_cast<float>(prevHeight) / static_cast<float>(_layerDescs[l]._height) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
-
-		int index = 0;
+		index = 0;
 
 		if (l == _layers.size() - 1) {
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);

@@ -25,11 +25,13 @@ namespace htfe {
 
 		float _dutyCycleDecay;
 		float _feedForwardAlpha;
+		float _predictiveAlpha;
 		float _lateralAlpha;
 		float _feedBackAlpha;
 		float _hiddenBiasAlpha;
 		float _reconstructionAlpha;
 		float _feedForwardMomentum;
+		float _predictiveMomentum;
 		float _lateralMomentum;
 		float _feedBackMomentum;
 		float _hiddenBiasMomentum;
@@ -43,8 +45,8 @@ namespace htfe {
 		LayerDesc()
 			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _inhibitionRadius(6), _feedBackConnectionRadius(6),
 			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.04f), _lateralAlpha(0.06f), _feedBackAlpha(0.12f), _hiddenBiasAlpha(0.04f), _reconstructionAlpha(0.04f),
-			_feedForwardMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _hiddenBiasMomentum(0.1f), _reconstructionMomentum(0.1f),
+			_feedForwardAlpha(0.04f), _predictiveAlpha(0.05f), _lateralAlpha(0.06f), _feedBackAlpha(0.12f), _hiddenBiasAlpha(0.04f), _reconstructionAlpha(0.04f),
+			_feedForwardMomentum(0.1f), _predictiveMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _hiddenBiasMomentum(0.1f), _reconstructionMomentum(0.1f),
 			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.001f), _blurKernelWidth(1.0f), _numBlurPasses(0)
 		{}
 	};
@@ -79,6 +81,8 @@ namespace htfe {
 		cl::Image3D _feedBackWeights;
 		cl::Image3D _feedBackWeightsPrev;
 
+		cl::Image2D _spatialReconstruction;
+
 		cl::Image2D _visibleReconstruction;
 		cl::Image2D _visibleReconstructionPrev;
 	};
@@ -93,6 +97,8 @@ namespace htfe {
 		cl::Kernel _layerHiddenFeedForwardActivateKernel;
 		cl::Kernel _layerHiddenFeedBackActivateKernel;
 		cl::Kernel _layerHiddenInhibitKernel;
+		cl::Kernel _layerSpatialReconstructKernel;
+		cl::Kernel _layerUpdateFeedForwardWeightsKernel;
 		cl::Kernel _layerVisibleReconstructKernel;
 		cl::Kernel _layerHiddenWeightUpdateKernel;
 		cl::Kernel _layerHiddenWeightUpdateLastKernel;
