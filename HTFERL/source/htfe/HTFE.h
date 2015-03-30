@@ -16,6 +16,7 @@ namespace htfe {
 
 		int _receptiveFieldRadius;
 		int _reconstructionRadius;
+		int _predictiveRadius;
 		int _lateralConnectionRadius;
 		int _inhibitionRadius;
 		int _feedBackConnectionRadius;
@@ -40,11 +41,11 @@ namespace htfe {
 		int _numBlurPasses;
 
 		LayerDesc()
-			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(6), _lateralConnectionRadius(5), _inhibitionRadius(4), _feedBackConnectionRadius(6),
-			_sparsity(3.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.01f), _lateralAlpha(0.05f), _feedBackAlpha(0.1f), _hiddenBiasAlpha(0.01f), _reconstructionAlpha(0.01f),
-			_feedForwardMomentum(0.5f), _lateralMomentum(0.5f), _feedBackMomentum(0.5f), _hiddenBiasMomentum(0.5f), _reconstructionMomentum(0.5f),
-			_lateralScalar(0.05f), _feedBackScalar(0.05f), _minDerivative(0.001f), _blurKernelWidth(1.0f), _numBlurPasses(1)
+			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _inhibitionRadius(6), _feedBackConnectionRadius(6),
+			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
+			_feedForwardAlpha(0.04f), _lateralAlpha(0.06f), _feedBackAlpha(0.12f), _hiddenBiasAlpha(0.04f), _reconstructionAlpha(0.04f),
+			_feedForwardMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _hiddenBiasMomentum(0.1f), _reconstructionMomentum(0.1f),
+			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.001f), _blurKernelWidth(1.0f), _numBlurPasses(0)
 		{}
 	};
 
@@ -69,11 +70,8 @@ namespace htfe {
 		cl::Image3D _reconstructionWeights;
 		cl::Image3D _reconstructionWeightsPrev;
 
-		cl::Image2D _visibleBiases;
-		cl::Image2D _visibleBiasesPrev;
-
-		cl::Image2D _hiddenBiases;
-		cl::Image2D _hiddenBiasesPrev;
+		cl::Image3D _predictiveWeights;
+		cl::Image3D _predictiveWeightsPrev;
 
 		cl::Image3D _lateralWeights;
 		cl::Image3D _lateralWeightsPrev;

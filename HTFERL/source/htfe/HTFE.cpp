@@ -66,8 +66,9 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 	int prevHeight = _inputHeight;
 
 	for (int l = 0; l < _layers.size(); l++) {
-		int numFeedForwardWeights = std::pow(_layerDescs[l]._receptiveFieldRadius * 2 + 1, 2);
-		int numReconstructionWeights = std::pow(_layerDescs[l]._reconstructionRadius * 2 + 1, 2);
+		int numFeedForwardWeights = std::pow(_layerDescs[l]._receptiveFieldRadius * 2 + 1, 2) + 1; // + 1 for bias
+		int numReconstructionWeights = std::pow(_layerDescs[l]._reconstructionRadius * 2 + 1, 2) + 1; // + 1 for bias
+		int numPredictiveWeights = std::pow(_layerDescs[l]._predictiveRadius * 2 + 1, 2) + 1; // + 1 for bias
 		int numLateralWeights = std::pow(_layerDescs[l]._lateralConnectionRadius * 2 + 1, 2);
 		int numFeedBackWeights = std::pow(_layerDescs[l]._feedBackConnectionRadius * 2 + 1, 2);
 
@@ -92,11 +93,8 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		_layers[l]._reconstructionWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight, numReconstructionWeights);
 		_layers[l]._reconstructionWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight, numReconstructionWeights);
 
-		_layers[l]._visibleBiases = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight);
-		_layers[l]._visibleBiasesPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), prevWidth, prevHeight);
-
-		_layers[l]._hiddenBiases = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
-		_layers[l]._hiddenBiasesPrev = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height);
+		_layers[l]._predictiveWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numPredictiveWeights);
+		_layers[l]._predictiveWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numPredictiveWeights);
 
 		_layers[l]._lateralWeights = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numLateralWeights);
 		_layers[l]._lateralWeightsPrev = cl::Image3D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_RG, CL_FLOAT), _layerDescs[l]._width, _layerDescs[l]._height, numLateralWeights);
@@ -118,10 +116,11 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenStatesFeedForward);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._feedForwardWeights);
-		initializeLayerHiddenKernel.setArg(index++, _layers[l]._hiddenBiases);
+		initializeLayerHiddenKernel.setArg(index++, _layers[l]._predictiveWeights);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._lateralWeights);
 		initializeLayerHiddenKernel.setArg(index++, _layers[l]._feedBackWeights);
 		initializeLayerHiddenKernel.setArg(index++, numFeedForwardWeights);
+		initializeLayerHiddenKernel.setArg(index++, numPredictiveWeights);
 		initializeLayerHiddenKernel.setArg(index++, numLateralWeights);
 		initializeLayerHiddenKernel.setArg(index++, numFeedBackWeights);
 		initializeLayerHiddenKernel.setArg(index++, initSeedHidden);
@@ -139,7 +138,6 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 
 		index = 0;
 
-		initializeLayerVisibleKernel.setArg(index++, _layers[l]._visibleBiases);
 		initializeLayerVisibleKernel.setArg(index++, _layers[l]._visibleReconstruction);
 		initializeLayerVisibleKernel.setArg(index++, _layers[l]._reconstructionWeights);
 		initializeLayerVisibleKernel.setArg(index++, numReconstructionWeights);
@@ -215,25 +213,11 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 			origin[2] = 0;
 
 			cl::size_t<3> region;
-			region[0] = prevWidth;
-			region[1] = prevHeight;
-			region[2] = 1;
-
-			cs.getQueue().enqueueCopyImage(_layers[l]._visibleBiases, _layers[l]._visibleBiasesPrev, origin, origin, region);
-		}
-
-		{
-			cl::size_t<3> origin;
-			origin[0] = 0;
-			origin[1] = 0;
-			origin[2] = 0;
-
-			cl::size_t<3> region;
 			region[0] = _layerDescs[l]._width;
 			region[1] = _layerDescs[l]._height;
-			region[2] = 1;
+			region[2] = numPredictiveWeights;
 
-			cs.getQueue().enqueueCopyImage(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev, origin, origin, region);
+			cs.getQueue().enqueueCopyImage(_layers[l]._predictiveWeights, _layers[l]._predictiveWeightsPrev, origin, origin, region);
 		}
 
 		{
@@ -350,10 +334,7 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		int index = 0;
 
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, *pPrevLayer);
-		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
-		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
-		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, _layers[l]._hiddenFeedForwardActivations);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, layerSize);
 		_layerHiddenFeedForwardActivateKernel.setArg(index++, layerSizeMinusOneInv);
@@ -377,21 +358,23 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 
 		// Blur the inhibited results
-		gaussianBlur(cs, _layers[l]._hiddenStatesFeedForward, _layers[l]._blurPing, _layers[l]._blurPong, _layerDescs[l]._width, _layerDescs[l]._height, _layerDescs[l]._numBlurPasses, _layerDescs[l]._blurKernelWidth);
+		if (_layerDescs[l]._numBlurPasses != 0) {
+			gaussianBlur(cs, _layers[l]._hiddenStatesFeedForward, _layers[l]._blurPing, _layers[l]._blurPong, _layerDescs[l]._width, _layerDescs[l]._height, _layerDescs[l]._numBlurPasses, _layerDescs[l]._blurKernelWidth);
 
-		// Copy back to hiddenStatesFeedForward
-		{
-			cl::size_t<3> origin;
-			origin[0] = 0;
-			origin[1] = 0;
-			origin[2] = 0;
+			// Copy back to hiddenStatesFeedForward
+			{
+				cl::size_t<3> origin;
+				origin[0] = 0;
+				origin[1] = 0;
+				origin[2] = 0;
 
-			cl::size_t<3> region;
-			region[0] = _layerDescs[l]._width;
-			region[1] = _layerDescs[l]._height;
-			region[2] = 1;
+				cl::size_t<3> region;
+				region[0] = _layerDescs[l]._width;
+				region[1] = _layerDescs[l]._height;
+				region[2] = 1;
 
-			cs.getQueue().enqueueCopyImage(_layers[l]._blurPong, _layers[l]._hiddenStatesFeedForward, origin, origin, region);
+				cs.getQueue().enqueueCopyImage(_layers[l]._blurPong, _layers[l]._hiddenStatesFeedForward, origin, origin, region);
+			}
 		}
 
 		pPrevLayer = &_layers[l]._hiddenStatesFeedForward;
@@ -473,15 +456,20 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 			cs.getQueue().enqueueCopyImage(_layers[l]._hiddenFeedForwardActivations, _layers[l]._hiddenFeedBackActivations, origin, origin, region);
 		}
 		else {
-			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._hiddenFeedForwardActivations);
-			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l + 1]._hiddenFeedBackActivations);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._hiddenStatesFeedForward);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l + 1]._hiddenStatesFeedBack);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._predictiveWeightsPrev);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._feedBackWeightsPrev);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, _layers[l]._hiddenFeedBackActivations);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, layerSize);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, layerSizeMinusOneInv);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, nextSize);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, nextSizeMinusOne);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenFeedBackActivateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
+			_layerHiddenFeedBackActivateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenFeedBackActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._width, _layerDescs[l]._height));
 		}
@@ -504,7 +492,6 @@ void HTFE::activate(sys::ComputeSystem &cs) {
 
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._hiddenStatesFeedBack);
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
-		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
 		_layerVisibleReconstructKernel.setArg(index++, _layers[l]._visibleReconstruction);
 		_layerVisibleReconstructKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 		_layerVisibleReconstructKernel.setArg(index++, inputSizeMinusOne);
@@ -598,29 +585,33 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		momenta._z = _layerDescs[l]._feedBackMomentum;
 		momenta._w = _layerDescs[l]._hiddenBiasMomentum;
 
+		Int2 reverseReconstructionReceptiveRadius;
+		reverseReconstructionReceptiveRadius._x = std::ceil(static_cast<float>(prevWidth) / static_cast<float>(_layerDescs[l]._width) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
+		reverseReconstructionReceptiveRadius._y = std::ceil(static_cast<float>(prevHeight) / static_cast<float>(_layerDescs[l]._height) * static_cast<float>(_layerDescs[l]._reconstructionRadius));
+
 		int index = 0;
 
 		if (l == _layers.size() - 1) {
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, *pPrevLayer);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, *pPrevLayerFeedForwardPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesFeedForwardPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenFeedBackActivationsPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrevPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._predictiveWeightsPrev);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._feedForwardWeights);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._predictiveWeights);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._lateralWeights);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layers[l]._hiddenBiases);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, layerSize);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, layerSizeMinusOne);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, layerSizeMinusOneInv);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, inputSize);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, inputSizeMinusOne);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, inputSizeMinusOneInv);
-			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, reverseReconstructionReceptiveRadius);
+			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 			_layerHiddenWeightUpdateLastKernel.setArg(index++, _layerDescs[l]._sparsity);
@@ -634,18 +625,17 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._visibleReconstructionPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayer);
 			_layerHiddenWeightUpdateKernel.setArg(index++, *pPrevLayerFeedForwardPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedForwardPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenFeedBackActivationsPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrevPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l + 1]._hiddenStatesFeedBackPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeightsPrev);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._predictiveWeightsPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiasesPrev);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedBackWeightsPrev);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedForwardWeights);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._predictiveWeights);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._lateralWeights);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._hiddenBiases);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layers[l]._feedBackWeights);
 			_layerHiddenWeightUpdateKernel.setArg(index++, layerSize);
 			_layerHiddenWeightUpdateKernel.setArg(index++, layerSizeMinusOne);
@@ -655,7 +645,8 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerHiddenWeightUpdateKernel.setArg(index++, inputSizeMinusOneInv);
 			_layerHiddenWeightUpdateKernel.setArg(index++, nextSize);
 			_layerHiddenWeightUpdateKernel.setArg(index++, nextSizeMinusOne);
-			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerHiddenWeightUpdateKernel.setArg(index++, reverseReconstructionReceptiveRadius);
+			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
 			_layerHiddenWeightUpdateKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
@@ -673,9 +664,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerVisibleWeightUpdateKernel.setArg(index++, *pPrevLayer);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesFeedBackPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._reconstructionWeightsPrev);
-		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleBiasesPrev);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._reconstructionWeights);
-		_layerVisibleWeightUpdateKernel.setArg(index++, _layers[l]._visibleBiases);
 		_layerVisibleWeightUpdateKernel.setArg(index++, _layerDescs[l]._reconstructionRadius);
 		_layerVisibleWeightUpdateKernel.setArg(index++, inputSizeMinusOne);
 		_layerVisibleWeightUpdateKernel.setArg(index++, inputSizeMinusOneInv);
@@ -687,7 +676,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 
 		cs.getQueue().enqueueNDRangeKernel(_layerVisibleWeightUpdateKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 
-		pPrevLayer = &_layers[l]._hiddenStatesFeedBack; // Or _hiddenStatesFeedBack ?
+		pPrevLayer = &_layers[l]._hiddenStatesFeedForward; // Or _hiddenStatesFeedBack ?
 		prevWidth = _layerDescs[l]._width;
 		prevHeight = _layerDescs[l]._height;
 
@@ -715,8 +704,7 @@ void HTFE::stepEnd() {
 
 		std::swap(_layers[l]._feedForwardWeights, _layers[l]._feedForwardWeightsPrev);
 		std::swap(_layers[l]._reconstructionWeights, _layers[l]._reconstructionWeightsPrev);
-		std::swap(_layers[l]._visibleBiases, _layers[l]._visibleBiasesPrev);
-		std::swap(_layers[l]._hiddenBiases, _layers[l]._hiddenBiasesPrev);
+		std::swap(_layers[l]._predictiveWeights, _layers[l]._predictiveWeightsPrev);
 		std::swap(_layers[l]._lateralWeights, _layers[l]._lateralWeightsPrev);
 		std::swap(_layers[l]._feedBackWeights, _layers[l]._feedBackWeightsPrev);
 	}

@@ -126,6 +126,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	// Find nextQ
 	float nextQ = 0.0f;
+	float predQ = 0.0f;
 
 	for (int i = 0; i < _qNodes.size(); i++) {
 		float sum = 0.0f;
@@ -152,9 +153,11 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		_qNodes[i]._output = sum;
 
 		nextQ += _qNodes[i]._output;
+		predQ += _htfe.getPrediction(_qNodes[i]._index);
 	}
 
 	nextQ /= _qNodes.size();
+	predQ /= _qNodes.size();
 
 	float tdError = reward + qGamma * nextQ - _prevValue;
 
@@ -318,49 +321,13 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		}
 	}
 
-	std::cout << nextQ << " " << tdError << " " << _actionNodes[0]._output << std::endl;
+	std::cout << nextQ << " " << tdError << " " << predQ << " " << (nextQ - predQ) << std::endl;
 
 	// ------------------------------------------------------------------------------
 	// ---------------------- Weight Update and Predictions  ------------------------
 	// ------------------------------------------------------------------------------
 
 	_htfe.learn(cs);
-
-	// ------------------------------------------------------------------------------
-	// -------------------------------- Update Input --------------------------------
-	// ------------------------------------------------------------------------------
-	
-	// Recompute nextQ
-	nextQ = 0.0f;
-
-	for (int i = 0; i < _qNodes.size(); i++) {
-		float sum = 0.0f;
-
-		int cx = std::round((_qNodes[i]._index % _htfe.getInputWidth()) * layerOverInput._x);
-		int cy = std::round((_qNodes[i]._index / _htfe.getInputWidth()) * layerOverInput._y);
-
-		int wi = 0;
-
-		for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-			for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
-				int x = cx + dx;
-				int y = cy + dy;
-
-				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-					int j = x + y * _htfe.getLayerDescs().front()._width;
-
-					sum += _qNodes[i]._connections[wi]._weight * firstHidden[j];
-				}
-
-				wi++;
-			}
-
-		_qNodes[i]._output = sum;
-
-		nextQ += _qNodes[i]._output;
-	}
-
-	nextQ /= _qNodes.size();
 
 	_prevValue = nextQ;
 
