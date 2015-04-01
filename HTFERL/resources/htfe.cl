@@ -29,6 +29,13 @@ float randFloat(uint2* state) {
 	return convert_float(tmp) * invMaxInt;
 }
 
+float randNormal(uint2* state) {
+	float u1 = randFloat(state);
+	float u2 = randFloat(state);
+
+	return sqrt(-2.0f * log(u1)) * cos(6.28318f * u2);
+}
+
 float sigmoid(float x) {
 	return 1.0f / (1.0f + exp(-x));
 }
@@ -292,8 +299,10 @@ void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStat
 }
 
 void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeights, write_only image2d_t inputReconstruction,
-	int receptiveRadius, int2 reverseReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv)
+	int receptiveRadius, int2 reverseReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, uint2 seed)
 {
+	uint2 seedValue = seed + (uint2)(get_global_id(0) * 23 + 9, get_global_id(1) * 5 + 2) * 2;
+
 	int2 visiblePosition = (int2)(get_global_id(0), get_global_id(1));
 	float2 layerPositionNormalized = (float2)(visiblePosition.x * inputSizeMinusOneInv.x, visiblePosition.y * inputSizeMinusOneInv.y);
 	int2 layerPositionCenter = (int2)(layerPositionNormalized.x * layerSizeMinusOne.x, layerPositionNormalized.y * layerSizeMinusOne.y);
@@ -327,14 +336,61 @@ void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only im
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float probability = sigmoid(sum);
+
+	float recon = randFloat(&seedValue) < probability ? 1.0f : 0.0f;
+
+	write_imagef(inputReconstruction, visiblePosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
+}
+
+void kernel layerInputReconstructGaussian(read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeights, write_only image2d_t inputReconstruction,
+	int receptiveRadius, int2 reverseReceptiveRadius, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, uint2 seed, float noise)
+{
+	uint2 seedValue = seed + (uint2)(get_global_id(0) * 23 + 9, get_global_id(1) * 5 + 2) * 2;
+
+	int2 visiblePosition = (int2)(get_global_id(0), get_global_id(1));
+	float2 layerPositionNormalized = (float2)(visiblePosition.x * inputSizeMinusOneInv.x, visiblePosition.y * inputSizeMinusOneInv.y);
+	int2 layerPositionCenter = (int2)(layerPositionNormalized.x * layerSizeMinusOne.x, layerPositionNormalized.y * layerSizeMinusOne.y);
+
+	float sum = 0.0f;
+
+	for (int dx = -reverseReceptiveRadius.x; dx <= reverseReceptiveRadius.x; dx++)
+		for (int dy = -reverseReceptiveRadius.y; dy <= reverseReceptiveRadius.y; dy++) {
+			int2 layerPosition = (int2)(layerPositionCenter.x + dx, layerPositionCenter.y + dy);
+
+			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
+				// Next layer node's receptive field
+				int2 fieldCenter = (int2)(layerPosition.x * layerSizeMinusOneInv.x * inputSizeMinusOne.x, layerPosition.y * layerSizeMinusOneInv.y * inputSizeMinusOne.y);
+
+				int2 fieldLowerBounds = fieldCenter - (int2)(receptiveRadius);
+				int2 fieldUpperBounds = fieldCenter + (int2)(receptiveRadius);
+
+				// Check for containment
+				if (visiblePosition.x >= fieldLowerBounds.x && visiblePosition.x <= fieldUpperBounds.x && visiblePosition.y >= fieldLowerBounds.y && visiblePosition.y <= fieldUpperBounds.y) {
+					int rdx = visiblePosition.x - fieldLowerBounds.x;
+					int rdy = visiblePosition.y - fieldLowerBounds.y;
+
+					float input = read_imagef(hiddenStates, layerPosition).x;
+
+					int weightIndex = rdy + rdx * (receptiveRadius * 2 + 1);
+
+					float weight = read_imagef(feedForwardWeights, (int4)(layerPosition.x, layerPosition.y, weightIndex, 0)).x;
+
+					sum += input * weight;
+				}
+			}
+		}
+
+	float recon = sum + randNormal(&seedValue) * noise;
 
 	write_imagef(inputReconstruction, visiblePosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only image3d_t predictiveWeights, write_only image2d_t spatialReconstruction,
-	int predictiveRadius, int2 reversePredictiveRadius, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv)
+	int predictiveRadius, int2 reversePredictiveRadius, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, uint2 seed)
 {
+	uint2 seedValue = seed + (uint2)(get_global_id(0) * 2 + 11, get_global_id(1) * 5 + 7) * 5;
+
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
 	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
@@ -369,14 +425,18 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float probability = sigmoid(sum);
+
+	float recon = randFloat(&seedValue) < probability ? 1.0f : 0.0f;
 
 	write_imagef(spatialReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerTemporalReconstruct(read_only image2d_t hiddenStates, read_only image3d_t lateralWeights, write_only image2d_t temporalReconstruction,
-	int lateralRadius, int2 layerSize)
+	int lateralRadius, int2 layerSize, uint2 seed)
 {
+	uint2 seedValue = seed + (uint2)(get_global_id(0) * 32 + 2, get_global_id(1) * 6 + 1) * 6;
+
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
 	float sum = 0.0f;
@@ -396,14 +456,18 @@ void kernel layerTemporalReconstruct(read_only image2d_t hiddenStates, read_only
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float probability = sigmoid(sum);
+
+	float recon = randFloat(&seedValue) < probability ? 1.0f : 0.0f;
 
 	write_imagef(temporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTemporal, read_only image3d_t feedBackWeights, write_only image2d_t nextTemporalReconstruction,
-	int feedBackRadius, int2 reverseFeedBackRadius, int2 nextSizeMinusOne, float2 nextSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv)
+	int feedBackRadius, int2 reverseFeedBackRadius, int2 nextSizeMinusOne, float2 nextSizeMinusOneInv, int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, uint2 seed)
 {
+	uint2 seedValue = seed + (uint2)(get_global_id(0) * 4 + 23, get_global_id(1) * 2 + 44) * 3;
+
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
 	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * nextSizeMinusOneInv.x, hiddenPosition.y * nextSizeMinusOneInv.y);
@@ -438,7 +502,9 @@ void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTempora
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float probability = sigmoid(sum);
+
+	float recon = randFloat(&seedValue) < probability ? 1.0f : 0.0f;
 
 	write_imagef(nextTemporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -862,7 +928,6 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
-
 			}
 
 			wi++;
