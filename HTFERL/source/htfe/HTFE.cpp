@@ -106,6 +106,8 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 
 		_layers[l]._inputReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
 
+		_layers[l]._predictedInputReconstruction = cl::Image2D(cs.getContext(), CL_MEM_READ_WRITE, cl::ImageFormat(CL_R, CL_FLOAT), prevWidth, prevHeight);
+
 		// Initialize
 		Uint2 initSeedHiddenSpatial;
 		initSeedHiddenSpatial._x = seedDist(generator);
@@ -316,6 +318,10 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		inputSizeMinusOneInv._x = 1.0f / (prevWidth - 1);
 		inputSizeMinusOneInv._y = 1.0f / (prevHeight - 1);
 
+		Int2 reverseReceptiveRadius;
+		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._spatialWidth) / static_cast<float>(prevWidth)* static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
+		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._spatialHeight) / static_cast<float>(prevHeight)* static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
+
 		// -------------------------------- Activate --------------------------------
 
 		Uint2 activateFeedForwardSeed;
@@ -337,6 +343,21 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerHiddenStatesSpatialActivateKernel.setArg(index++, activateFeedForwardSeed);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesSpatialActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
+
+		// Reconstruction
+
+		_layerInputReconstructKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
+		_layerInputReconstructKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
+		_layerInputReconstructKernel.setArg(index++, _layers[l]._inputReconstruction);
+		_layerInputReconstructKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+		_layerInputReconstructKernel.setArg(index++, reverseReceptiveRadius);
+		_layerInputReconstructKernel.setArg(index++, inputSizeMinusOne);
+		_layerInputReconstructKernel.setArg(index++, inputSizeMinusOneInv);
+		_layerInputReconstructKernel.setArg(index++, layerSizeSpatial);
+		_layerInputReconstructKernel.setArg(index++, layerSizeSpatialMinusOne);
+		_layerInputReconstructKernel.setArg(index++, layerSizeSpatialMinusOneInv);
+
+		cs.getQueue().enqueueNDRangeKernel(_layerInputReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 
 		pPrevLayer = &_layers[l]._hiddenStatesSpatial;
 		prevWidth = _layerDescs[l]._spatialWidth;
@@ -536,7 +557,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 
 		_layerInputReconstructKernel.setArg(index++, _layers[l]._predictedSpatial);
 		_layerInputReconstructKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
-		_layerInputReconstructKernel.setArg(index++, _layers[l]._inputReconstruction);
+		_layerInputReconstructKernel.setArg(index++, _layers[l]._predictedInputReconstruction);
 		_layerInputReconstructKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
 		_layerInputReconstructKernel.setArg(index++, reverseReceptiveRadius);
 		_layerInputReconstructKernel.setArg(index++, inputSizeMinusOne);
@@ -559,7 +580,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		region[1] = _inputHeight;
 		region[2] = 1;
 
-		cs.getQueue().enqueueReadImage(_layers.front()._inputReconstruction, CL_TRUE, origin, region, 0, 0, _prediction.data());
+		cs.getQueue().enqueueReadImage(_layers.front()._predictedInputReconstruction, CL_TRUE, origin, region, 0, 0, _prediction.data());
 	}
 }
 
@@ -646,7 +667,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		// Spatial reconstruction and weight update
 
 		_layerUpdateSpatialWeightsKernel.setArg(index++, *pPrevLayer);
-		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialReconstruction);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._inputReconstruction);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeights);

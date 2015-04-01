@@ -369,7 +369,7 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sigmoid(sum);
 
 	write_imagef(spatialReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -396,7 +396,7 @@ void kernel layerTemporalReconstruct(read_only image2d_t hiddenStates, read_only
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sigmoid(sum);
 
 	write_imagef(temporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -438,7 +438,7 @@ void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTempora
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sigmoid(sum);
 
 	write_imagef(nextTemporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -471,7 +471,7 @@ void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only imag
 
 	float hiddenState = read_imagef(hiddenStates, hiddenPosition).x;
 
-	float sparsityPenalty = lambda * (sparsity - hiddenState);
+	float sparsityPenalty = lambda * (sparsity - average);
 
 	float sum = 0.0f;
 

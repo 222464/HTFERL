@@ -414,7 +414,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getInputHeight();
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._inputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._predictedInputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
