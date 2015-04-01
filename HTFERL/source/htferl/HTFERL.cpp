@@ -69,7 +69,7 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_maxActionPrev.assign(_actionNodes.size(), 0.0f);
 
 	_hiddenStatesPrev.clear();
-	_hiddenStatesPrev.assign(layerDescs.front()._width * layerDescs.front()._height, 0.0f);
+	_hiddenStatesPrev.assign(layerDescs.front()._temporalWidth * layerDescs.front()._temporalHeight, 0.0f);
 }
 
 void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, int replayChainSize, int replayCount, std::mt19937 &generator) {
@@ -94,17 +94,17 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	for (int i = 0; i < _input.size(); i++)
 		_htfe.setInput(i, _input[i]);
 
-	_htfe.activate(cs);
+	_htfe.activate(cs, generator);
 
 	// ------------------------------------------------------------------------------
 	// ----------------------------- Q Value Updates  -------------------------------
 	// ------------------------------------------------------------------------------
 
 	Float2 layerOverInput;
-	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._width - 1) / static_cast<float>(_htfe.getInputWidth() - 1);
-	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._height - 1) / static_cast<float>(_htfe.getInputHeight() - 1);
+	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._temporalWidth - 1) / static_cast<float>(_htfe.getInputWidth() - 1);
+	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._temporalHeight - 1) / static_cast<float>(_htfe.getInputHeight() - 1);
 
-	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._width * _htfe.getLayerDescs().front()._height);
+	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
 
 	// Exploratory action
 	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
@@ -117,11 +117,11 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		origin[2] = 0;
 
 		cl::size_t<3> region;
-		region[0] = _htfe.getLayerDescs().front()._width;
-		region[1] = _htfe.getLayerDescs().front()._height;
+		region[0] = _htfe.getLayerDescs().front()._temporalWidth;
+		region[1] = _htfe.getLayerDescs().front()._temporalHeight;
 		region[2] = 1;
 
-		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, firstHidden.data());
+		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, firstHidden.data());
 	}
 
 	// Find nextQ
@@ -141,8 +141,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 				int x = cx + dx;
 				int y = cy + dy;
 
-				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-					int j = x + y * _htfe.getLayerDescs().front()._width;
+				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+					int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 					sum += _qNodes[i]._connections[wi]._weight * firstHidden[j];
 				}
@@ -178,8 +178,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 				int x = cx + dx;
 				int y = cy + dy;
 
-				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-					int j = x + y * _htfe.getLayerDescs().front()._width;
+				if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+					int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 					sum += _actionNodes[i]._connections[wi]._weight * firstHidden[j];
 				}
@@ -245,8 +245,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int x = cx + dx;
 					int y = cy + dy;
 
-					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-						int j = x + y * _htfe.getLayerDescs().front()._width;
+					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+						int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 						sum += _qNodes[i]._connections[wi]._weight * replaySamplesVec[r]->_hiddenStates[j];
 					}
@@ -263,8 +263,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int x = cx + dx;
 					int y = cy + dy;
 
-					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-						int j = x + y * _htfe.getLayerDescs().front()._width;
+					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+						int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 						_qNodes[i]._connections[wi]._weight += alphaQ * qError *  replaySamplesVec[r]->_hiddenStates[j];
 					}
@@ -287,8 +287,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int x = cx + dx;
 					int y = cy + dy;
 
-					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-						int j = x + y * _htfe.getLayerDescs().front()._width;
+					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+						int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 						sum += _actionNodes[i]._connections[wi]._weight * replaySamplesVec[r]->_hiddenStates[j];
 					}
@@ -310,8 +310,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 					int x = cx + dx;
 					int y = cy + dy;
 
-					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._width && y < _htfe.getLayerDescs().front()._height) {
-						int j = x + y * _htfe.getLayerDescs().front()._width;
+					if (x >= 0 && y >= 0 && x < _htfe.getLayerDescs().front()._temporalWidth && y < _htfe.getLayerDescs().front()._temporalHeight) {
+						int j = x + y * _htfe.getLayerDescs().front()._temporalWidth;
 
 						_actionNodes[i]._connections[wi]._weight += alphaAction * aError * replaySamplesVec[r]->_hiddenStates[j];
 					}
@@ -354,8 +354,8 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	int maxHeight = _htfe.getInputHeight();
 
 	for (int l = 0; l < _htfe.getLayerDescs().size(); l++) {
-		maxWidth = std::max<int>(maxWidth, _htfe.getLayerDescs()[l]._width);
-		maxHeight = std::max<int>(maxHeight, _htfe.getLayerDescs()[l]._height);
+		maxWidth = std::max<int>(maxWidth, _htfe.getLayerDescs()[l]._temporalWidth);
+		maxHeight = std::max<int>(maxHeight, _htfe.getLayerDescs()[l]._temporalHeight);
 	}
 
 	std::uniform_real_distribution<float> uniformDist(0.0f, 1.0f);
@@ -412,7 +412,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getInputHeight();
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._visibleReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._inputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -440,7 +440,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	}
 	else {
 		for (int l = 0; l < _htfe.getLayerDescs().size(); l++) {
-			std::vector<float> state(_htfe.getLayerDescs()[l]._width * _htfe.getLayerDescs()[l]._height);
+			std::vector<float> state(_htfe.getLayerDescs()[l]._temporalWidth * _htfe.getLayerDescs()[l]._temporalHeight);
 
 			cl::size_t<3> origin;
 			origin[0] = 0;
@@ -448,11 +448,11 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			origin[2] = 0;
 
 			cl::size_t<3> region;
-			region[0] = _htfe.getLayerDescs()[l]._width;
-			region[1] = _htfe.getLayerDescs()[l]._height;
+			region[0] = _htfe.getLayerDescs()[l]._temporalWidth;
+			region[1] = _htfe.getLayerDescs()[l]._temporalHeight;
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesFeedBack, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -464,15 +464,15 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 			image->create(maxWidth, maxHeight, sf::Color::Transparent);
 
-			for (int x = 0; x < _htfe.getLayerDescs()[l]._width; x++)
-				for (int y = 0; y < _htfe.getLayerDescs()[l]._height; y++) {
+			for (int x = 0; x < _htfe.getLayerDescs()[l]._temporalWidth; x++)
+				for (int y = 0; y < _htfe.getLayerDescs()[l]._temporalHeight; y++) {
 					sf::Color color;
 
 					color = c;
 
-					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getLayerDescs()[l]._width)])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
 
-					image->setPixel(x - _htfe.getLayerDescs()[l]._width / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._height / 2 + maxHeight / 2, color);
+					image->setPixel(x - _htfe.getLayerDescs()[l]._temporalWidth / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._temporalHeight / 2 + maxHeight / 2, color);
 				}
 
 			images.push_back(image);

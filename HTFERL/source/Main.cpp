@@ -139,25 +139,27 @@ int main() {
 
 	htferl::HTFERL agent;
 
-	std::vector<htfe::LayerDesc> layerDescs(6);
+	std::vector<htfe::LayerDesc> layerDescs(4);
 
-	layerDescs[0]._width = 128;
-	layerDescs[0]._height = 128;
+	layerDescs[0]._spatialWidth = 128;
+	layerDescs[0]._spatialHeight = 128;
+	layerDescs[0]._temporalWidth = 128;
+	layerDescs[0]._temporalHeight = 128;
 
-	layerDescs[1]._width = 100;
-	layerDescs[1]._height = 100;
+	layerDescs[1]._spatialWidth = 90;
+	layerDescs[1]._spatialHeight = 90;
+	layerDescs[1]._temporalWidth = 90;
+	layerDescs[1]._temporalHeight = 90;
 
-	layerDescs[2]._width = 88;
-	layerDescs[2]._height = 88;
+	layerDescs[2]._spatialWidth = 70;
+	layerDescs[2]._spatialHeight = 70;
+	layerDescs[2]._temporalWidth = 70;
+	layerDescs[2]._temporalHeight = 70;
 
-	layerDescs[3]._width = 70;
-	layerDescs[3]._height = 70;
-
-	layerDescs[4]._width = 64;
-	layerDescs[4]._height = 64;
-
-	layerDescs[5]._width = 48;
-	layerDescs[5]._height = 48;
+	layerDescs[3]._spatialWidth = 64;
+	layerDescs[3]._spatialHeight = 64;
+	layerDescs[3]._temporalWidth = 64;
+	layerDescs[3]._temporalHeight = 64;
 
 	std::vector<htferl::HTFERL::InputType> inputTypes(64 * 64, htferl::HTFERL::_state);
 

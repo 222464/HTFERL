@@ -369,6 +369,10 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 
 		// -------------------------------- Activate --------------------------------
 
+		Uint2 activateFeedBackSeed;
+		activateFeedBackSeed._x = seedDist(generator);
+		activateFeedBackSeed._y = seedDist(generator);
+
 		int index = 0;
 
 		if (l == _layers.size() - 1) {
@@ -382,6 +386,8 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, layerSizeTemporalMinusOneInv);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
+			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
+			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, activateFeedBackSeed);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesTemporalActivateLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
@@ -400,6 +406,8 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
+			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
+			_layerHiddenStatesTemporalActivateKernel.setArg(index++, activateFeedBackSeed);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesTemporalActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
@@ -413,6 +421,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerSpatialReconstructKernel.setArg(index++, _layers[l]._spatialReconstruction);
 		_layerSpatialReconstructKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 		_layerSpatialReconstructKernel.setArg(index++, reversePredictiveRadius);
+		_layerSpatialReconstructKernel.setArg(index++, layerSizeSpatial);
 		_layerSpatialReconstructKernel.setArg(index++, layerSizeSpatialMinusOne);
 		_layerSpatialReconstructKernel.setArg(index++, layerSizeSpatialMinusOneInv);
 		_layerSpatialReconstructKernel.setArg(index++, layerSizeTemporal);
@@ -427,6 +436,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerTemporalReconstructKernel.setArg(index++, _layers[l]._lateralWeightsPrev);
 		_layerTemporalReconstructKernel.setArg(index++, _layers[l]._temporalReconstruction);
 		_layerTemporalReconstructKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
+		_layerTemporalReconstructKernel.setArg(index++, layerSizeTemporal);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerTemporalReconstructKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 	
