@@ -369,7 +369,7 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float recon = sum > 0.0f ? 1.0f : 0.0f;
 
 	write_imagef(spatialReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -396,7 +396,7 @@ void kernel layerTemporalReconstruct(read_only image2d_t hiddenStates, read_only
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float recon = sum > 0.0f ? 1.0f : 0.0f;
 
 	write_imagef(temporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -438,7 +438,7 @@ void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTempora
 			}
 		}
 
-	float recon = sigmoid(sum);
+	float recon = sum > 0.0f ? 1.0f : 0.0f;
 
 	write_imagef(nextTemporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -561,7 +561,9 @@ void kernel layerSpatialPredictiveReconstruct(read_only image2d_t hiddenStates, 
 			wi++;
 		}
 
-	write_imagef(predictedSpatial, visiblePosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
+	float recon = sum > 0.0f ? 1.0f : 0.0f;
+
+	write_imagef(predictedSpatial, visiblePosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporal, read_only image2d_t hiddenStatesTemporalPrev, read_only image2d_t hiddenStatesNextTemporal,

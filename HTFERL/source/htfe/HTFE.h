@@ -52,8 +52,8 @@ namespace htfe {
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
 			_receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(6), _temporalInhibitionRadius(6), _feedBackConnectionRadius(6),
 			_spatialSparsity(1.01f / 81.0f), _temporalSparsity(1.0f / 81.0f), _dutyCycleDecay(0.01f),
-			_spatialAlpha(0.02f), _predictiveAlpha(0.1f), _lateralAlpha(0.05f), _feedBackAlpha(0.15f), _reconstructionAlpha(0.02f),
-			_spatialLambda(0.5f), _temporalLambda(0.5f),
+			_spatialAlpha(0.005f), _predictiveAlpha(0.005f), _lateralAlpha(0.005f), _feedBackAlpha(0.005f), _reconstructionAlpha(0.005f),
+			_spatialLambda(0.01f), _temporalLambda(0.01f),
 			_spatialMomentum(0.1f), _predictiveMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _reconstructionMomentum(0.1f),
 			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.05f), _blurKernelWidth(1.0f), _numBlurPasses(0)
 		{}
