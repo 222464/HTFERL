@@ -12,29 +12,35 @@
 
 namespace htfe {
 	struct LayerDesc {
-		int _width, _height;
+		int _spatialWidth, _spatialHeight;
+		int _temporalWidth, _temporalHeight;
 
 		int _receptiveFieldRadius;
 		int _reconstructionRadius;
 		int _predictiveRadius;
 		int _lateralConnectionRadius;
-		int _inhibitionRadius;
+		int _spatialInhibitionRadius;
+		int _temporalInhibitionRadius;
 		int _feedBackConnectionRadius;
 
-		float _sparsity;
+		float _spatialSparsity;
+		float _temporalSparsity;
 
 		float _dutyCycleDecay;
-		float _feedForwardAlpha;
+
+		float _spatialAlpha;
 		float _predictiveAlpha;
 		float _lateralAlpha;
 		float _feedBackAlpha;
-		float _hiddenBiasAlpha;
 		float _reconstructionAlpha;
-		float _feedForwardMomentum;
+
+		float _spatialLambda;
+		float _temporalLambda;
+
+		float _spatialMomentum;
 		float _predictiveMomentum;
 		float _lateralMomentum;
 		float _feedBackMomentum;
-		float _hiddenBiasMomentum;
 		float _reconstructionMomentum;
 		float _lateralScalar;
 		float _feedBackScalar;
@@ -43,34 +49,29 @@ namespace htfe {
 		int _numBlurPasses;
 
 		LayerDesc()
-			: _width(16), _height(16), _receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _inhibitionRadius(6), _feedBackConnectionRadius(6),
-			_sparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_feedForwardAlpha(0.04f), _predictiveAlpha(0.05f), _lateralAlpha(0.06f), _feedBackAlpha(0.12f), _hiddenBiasAlpha(0.04f), _reconstructionAlpha(0.04f),
-			_feedForwardMomentum(0.1f), _predictiveMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _hiddenBiasMomentum(0.1f), _reconstructionMomentum(0.1f),
-			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.001f), _blurKernelWidth(1.0f), _numBlurPasses(0)
+			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
+			_receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(6), _temporalInhibitionRadius(6), _feedBackConnectionRadius(6),
+			_spatialSparsity(1.01f / 81.0f), _temporalSparsity(1.0f / 81.0f), _dutyCycleDecay(0.01f),
+			_spatialAlpha(0.02f), _predictiveAlpha(0.1f), _lateralAlpha(0.05f), _feedBackAlpha(0.15f), _reconstructionAlpha(0.02f),
+			_spatialLambda(0.5f), _temporalLambda(0.5f),
+			_spatialMomentum(0.1f), _predictiveMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _reconstructionMomentum(0.1f),
+			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.05f), _blurKernelWidth(1.0f), _numBlurPasses(0)
 		{}
 	};
 
 	struct Layer {
-		cl::Image2D _hiddenFeedForwardActivations;
-		cl::Image2D _hiddenFeedBackActivations;
-		cl::Image2D _hiddenFeedBackActivationsPrev;
+		cl::Image2D _hiddenStatesSpatial;
+		cl::Image2D _hiddenStatesSpatialPrev;
 
-		cl::Image2D _hiddenStatesFeedForward;
-		cl::Image2D _hiddenStatesFeedForwardPrev;
+		cl::Image2D _hiddenStatesTemporal;
+		cl::Image2D _hiddenStatesTemporalPrev;
+		cl::Image2D _hiddenStatesTemporalPrevPrev;
 
-		cl::Image2D _hiddenStatesFeedBack;
-		cl::Image2D _hiddenStatesFeedBackPrev;
-		cl::Image2D _hiddenStatesFeedBackPrevPrev;
+		cl::Image3D _spatialWeights;
+		cl::Image3D _spatialWeightsPrev;
 
-		cl::Image2D _blurPing;
-		cl::Image2D _blurPong;
-
-		cl::Image3D _feedForwardWeights;
-		cl::Image3D _feedForwardWeightsPrev;
-
-		cl::Image3D _reconstructionWeights;
-		cl::Image3D _reconstructionWeightsPrev;
+		cl::Image3D _spatialPredictiveReconstructionWeights;
+		cl::Image3D _spatialPredictiveReconstructionWeightsPrev;
 
 		cl::Image3D _predictiveWeights;
 		cl::Image3D _predictiveWeightsPrev;
@@ -82,9 +83,13 @@ namespace htfe {
 		cl::Image3D _feedBackWeightsPrev;
 
 		cl::Image2D _spatialReconstruction;
+		cl::Image2D _temporalReconstruction;
+		cl::Image2D _nextTemporalReconstruction;
 
-		cl::Image2D _visibleReconstruction;
-		cl::Image2D _visibleReconstructionPrev;
+		cl::Image2D _predictedSpatial;
+		cl::Image2D _predictedSpatialPrev;
+
+		cl::Image2D _inputReconstruction;
 	};
 
 	class HTFE {
@@ -94,15 +99,18 @@ namespace htfe {
 		std::vector<LayerDesc> _layerDescs;
 		std::vector<Layer> _layers;
 
-		cl::Kernel _layerHiddenFeedForwardActivateKernel;
-		cl::Kernel _layerHiddenFeedBackActivateKernel;
-		cl::Kernel _layerHiddenInhibitKernel;
+		cl::Kernel _layerHiddenStatesSpatialActivateKernel;
+		cl::Kernel _layerHiddenStatesTemporalActivateKernel;
+		cl::Kernel _layerHiddenStatesTemporalActivateLastKernel;
+		cl::Kernel _layerInputReconstructKernel;
 		cl::Kernel _layerSpatialReconstructKernel;
-		cl::Kernel _layerUpdateFeedForwardWeightsKernel;
-		cl::Kernel _layerVisibleReconstructKernel;
-		cl::Kernel _layerHiddenWeightUpdateKernel;
-		cl::Kernel _layerHiddenWeightUpdateLastKernel;
-		cl::Kernel _layerVisibleWeightUpdateKernel;
+		cl::Kernel _layerTemporalReconstructKernel;
+		cl::Kernel _layerNextTemporalReconstructKernel;
+		cl::Kernel _layerUpdateSpatialWeightsKernel;
+		cl::Kernel _layerSpatialPredictiveReconstructKernel;
+		cl::Kernel _layerUpdateTemporalWeightsKernel;
+		cl::Kernel _layerUpdateTemporalWeightsLastKernel;
+		cl::Kernel _layerSpatialPredictiveReconstructionWeightUpdateKernel;
 		cl::Kernel _gaussianBlurXKernel;
 		cl::Kernel _gaussianBlurYKernel;
 
@@ -117,7 +125,7 @@ namespace htfe {
 	public:
 		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<LayerDesc> &layerDescs, float minInitWeight, float maxInitWeight);
 
-		void activate(sys::ComputeSystem &cs);
+		void activate(sys::ComputeSystem &cs, std::mt19937 &generator);
 		void learn(sys::ComputeSystem &cs);
 		void stepEnd();
 
@@ -156,7 +164,5 @@ namespace htfe {
 		float getPrediction(int x, int y) const {
 			return getPrediction(x + y * _inputWidth);
 		}
-
-		void clearMemory(sys::ComputeSystem &cs);
 	};
 }
