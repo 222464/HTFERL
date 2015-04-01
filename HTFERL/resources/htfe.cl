@@ -471,7 +471,7 @@ void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only imag
 
 	float hiddenState = read_imagef(hiddenStates, hiddenPosition).x;
 
-	float sparsityPenalty = lambda * (sparsity - average);
+	float sparsityPenalty = lambda * (sparsity - hiddenState);
 
 	float sum = 0.0f;
 

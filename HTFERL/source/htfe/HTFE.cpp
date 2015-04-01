@@ -343,9 +343,6 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		prevHeight = _layerDescs[l]._spatialHeight;
 	}
 
-	cs.getQueue().finish();
-
-
 	// ------------------------------------------------------------------------------
 	// -------------------------------- Go back down --------------------------------
 	// ------------------------------------------------------------------------------
@@ -664,7 +661,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialMomentum);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLambda);
 
-		cs.getQueue().enqueueNDRangeKernel(_layerSpatialReconstructKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
+		cs.getQueue().enqueueNDRangeKernel(_layerUpdateSpatialWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
 		// Temporal reconstruction and weight update
 		
@@ -704,7 +701,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, momenta);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalLambda);
 
-			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
+			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
 		else {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
@@ -743,7 +740,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		index = 0;
 
 		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, _layers[l]._predictedSpatialPrev);
-		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, *pPrevLayer);
+		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
 		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, _layers[l]._hiddenStatesTemporalPrev);
 		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, _layers[l]._spatialPredictiveReconstructionWeightsPrev);
 		_layerSpatialPredictiveReconstructionWeightUpdateKernel.setArg(index++, _layers[l]._spatialPredictiveReconstructionWeights);
