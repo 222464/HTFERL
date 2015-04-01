@@ -5,11 +5,23 @@
 
 using namespace htferl;
 
-void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
-	struct Uint2 {
-		unsigned int _x, _y;
-	};
+struct Uint2 {
+	unsigned int _x, _y;
+};
 
+struct Float2 {
+	float _x, _y;
+};
+
+struct Float4 {
+	float _x, _y, _z, _w;
+};
+
+struct Int2 {
+	int _x, _y;
+};
+
+void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	_htfe.createRandom(cs, program, inputWidth, inputHeight, layerDescs, minInitWeight, maxInitWeight);
@@ -20,9 +32,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	std::uniform_real_distribution<float> actionDist(0.0f, 1.0f);
 
 	_prevValue = 0.0f;
-
-	cl::Kernel initializeLayerHiddenKernel = cl::Kernel(program.getProgram(), "initializeLayerHidden");
-	cl::Kernel initializeLayerVisibleKernel = cl::Kernel(program.getProgram(), "initializeLayerVisible");
 
 	_input.clear();
 	_input.resize(inputWidth * inputHeight);
@@ -73,18 +82,6 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 }
 
 void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, int replayChainSize, int replayCount, std::mt19937 &generator) {
-	struct Float2 {
-		float _x, _y;
-	};
-
-	struct Float4 {
-		float _x, _y, _z, _w;
-	};
-
-	struct Int2 {
-		int _x, _y;
-	};
-
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	// ------------------------------------------------------------------------------
@@ -104,7 +101,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._temporalWidth - 1) / static_cast<float>(_htfe.getInputWidth() - 1);
 	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._temporalHeight - 1) / static_cast<float>(_htfe.getInputHeight() - 1);
 
-	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
+	std::vector<Float4> firstHiddenVerbose(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
 
 	// Exploratory action
 	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
@@ -121,8 +118,13 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		region[1] = _htfe.getLayerDescs().front()._temporalHeight;
 		region[2] = 1;
 
-		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, firstHidden.data());
+		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, firstHiddenVerbose.data());
 	}
+
+	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
+
+	for (int i = 0; i < firstHidden.size(); i++)
+		firstHidden[i] = firstHiddenVerbose[i]._x;
 
 	// Find nextQ
 	float nextQ = 0.0f;
@@ -440,7 +442,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	}
 	else {
 		for (int l = 0; l < _htfe.getLayerDescs().size(); l++) {
-			std::vector<float> state(_htfe.getLayerDescs()[l]._temporalWidth * _htfe.getLayerDescs()[l]._temporalHeight);
+			std::vector<float> state(_htfe.getLayerDescs()[l]._temporalWidth * _htfe.getLayerDescs()[l]._temporalHeight * 4);
 
 			cl::size_t<3> origin;
 			origin[0] = 0;
@@ -470,7 +472,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 					color = c;
 
-					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[4 * (x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
 
 					image->setPixel(x - _htfe.getLayerDescs()[l]._temporalWidth / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._temporalHeight / 2 + maxHeight / 2, color);
 				}
