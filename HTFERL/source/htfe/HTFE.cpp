@@ -345,6 +345,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesSpatialActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
 		// Reconstruction
+		index = 0;
 
 		_layerInputReconstructKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
 		_layerInputReconstructKernel.setArg(index++, _layers[l]._spatialWeightsPrev);

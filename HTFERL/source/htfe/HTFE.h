@@ -44,18 +44,17 @@ namespace htfe {
 		float _reconstructionMomentum;
 		float _lateralScalar;
 		float _feedBackScalar;
-		float _minDerivative;
 		float _blurKernelWidth;
 		int _numBlurPasses;
 
 		LayerDesc()
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
 			_receptiveFieldRadius(4), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(4), _temporalInhibitionRadius(4), _feedBackConnectionRadius(6),
-			_spatialSparsity(5.01f / 81.0f), _temporalSparsity(5.0f / 81.0f), _dutyCycleDecay(0.01f),
+			_spatialSparsity(3.01f / 81.0f), _temporalSparsity(3.0f / 81.0f), _dutyCycleDecay(0.01f),
 			_spatialAlpha(0.01f), _predictiveAlpha(0.01f), _lateralAlpha(0.01f), _feedBackAlpha(0.01f), _reconstructionAlpha(0.01f),
-			_spatialLambda(10.0f), _temporalLambda(10.0f),
+			_spatialLambda(1.0f), _temporalLambda(1.0f),
 			_spatialMomentum(0.1f), _predictiveMomentum(0.1f), _lateralMomentum(0.1f), _feedBackMomentum(0.1f), _reconstructionMomentum(0.1f),
-			_lateralScalar(0.1f), _feedBackScalar(0.1f), _minDerivative(0.05f), _blurKernelWidth(1.0f), _numBlurPasses(0)
+			_lateralScalar(0.1f), _feedBackScalar(0.1f), _blurKernelWidth(1.0f), _numBlurPasses(0)
 		{}
 	};
 
