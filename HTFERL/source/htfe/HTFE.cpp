@@ -492,6 +492,8 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layers[l]._hiddenStatesTemporal);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, layerSizeTemporal);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, layerSizeTemporalMinusOneInv);
+			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, layerSizeSpatial);
+			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, layerSizeSpatialMinusOne);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
@@ -510,6 +512,8 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layers[l]._hiddenStatesTemporal);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, layerSizeTemporal);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, layerSizeTemporalMinusOneInv);
+			_layerHiddenStatesTemporalActivateKernel.setArg(index++, layerSizeSpatial);
+			_layerHiddenStatesTemporalActivateKernel.setArg(index++, layerSizeSpatialMinusOne);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, nextTemporalSize);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, nextTemporalSizeMinusOne);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._predictiveRadius);

@@ -162,14 +162,15 @@ void kernel layerHiddenStatesSpatialActivate(read_only image2d_t inputs, read_on
 
 void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev, read_only image2d_t nextLayerHiddenStatesTemporal,
 	read_only image3d_t predictiveWeights, read_only image3d_t feedBackWeights, read_only image3d_t lateralWeights, write_only image2d_t hiddenStatesTemporal,
-	int2 layerSize, float2 layerSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne, int predictiveRadius, int feedBackRadius, int lateralConnectionRadius, float dutyCycleDecay, float minDerivative, uint2 seed)
+	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, float2 inputSizeMinusOne, int2 nextSize, int2 nextSizeMinusOne, int predictiveRadius, int feedBackRadius, int lateralConnectionRadius, float dutyCycleDecay, float minDerivative, uint2 seed)
 {
 	uint2 seedValue = seed + (uint2)(get_global_id(0) * 56 + 2, get_global_id(1) * 6 + 4) * 3;
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
-	float2 nextCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
-	int2 nextCenterPosition = (int2)(nextCenterPositionNormalized.x * nextSizeMinusOne.x, nextCenterPositionNormalized.y * nextSizeMinusOne.y);
+	float2 positionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
+	int2 nextCenterPosition = (int2)(positionNormalized.x * nextSizeMinusOne.x, positionNormalized.y * nextSizeMinusOne.y);
+	int2 inputCenterPosition = (int2)(positionNormalized.x * inputSizeMinusOne.x, positionNormalized.y * inputSizeMinusOne.y);
 
 	float sum = 0.0f;
 
@@ -177,9 +178,9 @@ void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSp
 
 	for (int dx = -predictiveRadius; dx <= predictiveRadius; dx++)
 		for (int dy = -predictiveRadius; dy <= predictiveRadius; dy++) {
-			int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
+			int2 layerPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
 
-			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
+			if (layerPosition.x >= 0 && layerPosition.x < inputSize.x && layerPosition.y >= 0 && layerPosition.y < inputSize.y) {
 				float state = read_imagef(hiddenStatesSpatial, layerPosition).x;
 
 				float weight = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
@@ -244,11 +245,13 @@ void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSp
 
 void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev,
 	read_only image3d_t predictiveWeights, read_only image3d_t lateralWeights, write_only image2d_t hiddenStatesTemporal,
-	int2 layerSize, float2 layerSizeMinusOneInv, int predictiveRadius, int lateralConnectionRadius, float dutyCycleDecay, float minDerivative, uint2 seed)
+	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, float2 inputSizeMinusOne, int predictiveRadius, int lateralConnectionRadius, float dutyCycleDecay, float minDerivative, uint2 seed)
 {
 	uint2 seedValue = seed + (uint2)(get_global_id(0) * 56 + 2, get_global_id(1) * 6 + 4) * 3;
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
+	float2 positionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
+	int2 inputCenterPosition = (int2)(positionNormalized.x * inputSizeMinusOne.x, positionNormalized.y * inputSizeMinusOne.y);
 
 	float sum = 0.0f;
 
@@ -256,9 +259,9 @@ void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStat
 
 	for (int dx = -predictiveRadius; dx <= predictiveRadius; dx++)
 		for (int dy = -predictiveRadius; dy <= predictiveRadius; dy++) {
-			int2 layerPosition = (int2)(hiddenPosition.x + dx, hiddenPosition.y + dy);
+			int2 layerPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
 
-			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
+			if (layerPosition.x >= 0 && layerPosition.x < inputSize.x && layerPosition.y >= 0 && layerPosition.y < inputSize.y) {
 				float state = read_imagef(hiddenStatesSpatial, layerPosition).x;
 
 				float weight = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
