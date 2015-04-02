@@ -400,18 +400,18 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
-	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * layerSizeMinusOneInv.x, hiddenPosition.y * layerSizeMinusOneInv.y);
-	int2 inputCenterPosition = (int2)(inputCenterPositionNormalized.x * inputSizeMinusOne.x, inputCenterPositionNormalized.y * inputSizeMinusOne.y);
+	float2 positionNormalized = (float2)(hiddenPosition.x * inputSizeMinusOneInv.x, hiddenPosition.y * inputSizeMinusOneInv.y);
+	int2 layerCenterPosition = (int2)(positionNormalized.x * layerSizeMinusOne.x, positionNormalized.y * layerSizeMinusOne.y);
 
 	float sum = 0.0f;
 
 	for (int dx = -reversePredictiveRadius.x; dx <= reversePredictiveRadius.x; dx++)
 		for (int dy = -reversePredictiveRadius.y; dy <= reversePredictiveRadius.y; dy++) {
-			int2 inputPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
+			int2 layerPosition = (int2)(layerCenterPosition.x + dx, layerCenterPosition.y + dy);
 
-			if (inputPosition.x >= 0 && inputPosition.x < inputSize.x && inputPosition.y >= 0 && inputPosition.y < inputSize.y) {
+			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
 				// Next layer node's receptive field
-				int2 fieldCenter = (int2)(inputPosition.x * inputSizeMinusOneInv.x * layerSizeMinusOne.x, inputPosition.y * inputSizeMinusOneInv.y * layerSizeMinusOne.y);
+				int2 fieldCenter = (int2)(layerPosition.x * layerSizeMinusOneInv.x * inputSizeMinusOne.x, layerPosition.y * layerSizeMinusOneInv.y * inputSizeMinusOne.y);
 
 				int2 fieldLowerBounds = fieldCenter - (int2)(predictiveRadius);
 				int2 fieldUpperBounds = fieldCenter + (int2)(predictiveRadius);
@@ -421,11 +421,11 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 					int rdx = hiddenPosition.x - fieldLowerBounds.x;
 					int rdy = hiddenPosition.y - fieldLowerBounds.y;
 
-					float input = read_imagef(hiddenStates, inputPosition).x;
+					float input = read_imagef(hiddenStates, layerPosition).x;
 
 					int weightIndex = rdy + rdx * (predictiveRadius * 2 + 1);
 
-					float weight = read_imagef(predictiveWeights, (int4)(inputPosition.x, inputPosition.y, weightIndex, 0)).x;
+					float weight = read_imagef(predictiveWeights, (int4)(layerPosition.x, layerPosition.y, weightIndex, 0)).x;
 
 					sum += input * weight;
 				}
@@ -473,14 +473,14 @@ void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTempora
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
-	float2 inputCenterPositionNormalized = (float2)(hiddenPosition.x * nextSizeMinusOneInv.x, hiddenPosition.y * nextSizeMinusOneInv.y);
-	int2 inputCenterPosition = (int2)(inputCenterPositionNormalized.x * layerSizeMinusOne.x, inputCenterPositionNormalized.y * layerSizeMinusOne.y);
+	float2 positionNormalized = (float2)(hiddenPosition.x * nextSizeMinusOneInv.x, hiddenPosition.y * nextSizeMinusOneInv.y);
+	int2 layerCenterPosition = (int2)(positionNormalized.x * layerSizeMinusOne.x, positionNormalized.y * layerSizeMinusOne.y);
 
 	float sum = 0.0f;
 
 	for (int dx = -reverseFeedBackRadius.x; dx <= reverseFeedBackRadius.x; dx++)
 		for (int dy = -reverseFeedBackRadius.y; dy <= reverseFeedBackRadius.y; dy++) {
-			int2 prevPosition = (int2)(inputCenterPosition.x + dx, inputCenterPosition.y + dy);
+			int2 prevPosition = (int2)(layerCenterPosition.x + dx, layerCenterPosition.y + dy);
 
 			if (prevPosition.x >= 0 && prevPosition.x < layerSize.x && prevPosition.y >= 0 && prevPosition.y < layerSize.y) {
 				// Next layer node's receptive field
