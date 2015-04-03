@@ -64,9 +64,11 @@ namespace htfe {
 	};
 
 	struct Layer {
+		cl::Image2D _hiddenActivationsSpatial;
 		cl::Image2D _hiddenStatesSpatial;
 		cl::Image2D _hiddenStatesSpatialPrev;
 
+		cl::Image2D _hiddenActivationsTemporal;
 		cl::Image2D _hiddenStatesTemporal;
 		cl::Image2D _hiddenStatesTemporalPrev;
 		cl::Image2D _hiddenStatesTemporalPrevPrev;
@@ -107,6 +109,7 @@ namespace htfe {
 		std::vector<LayerDesc> _layerDescs;
 		std::vector<Layer> _layers;
 
+		cl::Kernel _layerInhibitKernel;
 		cl::Kernel _layerHiddenStatesSpatialActivateKernel;
 		cl::Kernel _layerHiddenStatesTemporalActivateKernel;
 		cl::Kernel _layerHiddenStatesTemporalActivateLastKernel;

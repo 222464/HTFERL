@@ -442,7 +442,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 	}
 	else {
 		for (int l = 0; l < _htfe.getLayerDescs().size(); l++) {
-			std::vector<float> state(_htfe.getLayerDescs()[l]._spatialWidth * _htfe.getLayerDescs()[l]._spatialHeight);
+			std::vector<float> state(2 * _htfe.getLayerDescs()[l]._spatialWidth * _htfe.getLayerDescs()[l]._spatialHeight);
 
 			cl::size_t<3> origin;
 			origin[0] = 0;
@@ -454,7 +454,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getLayerDescs()[l]._spatialHeight;
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._spatialReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesSpatial, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -472,7 +472,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 					color = c;
 
-					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
 
 					image->setPixel(x - _htfe.getLayerDescs()[l]._temporalWidth / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._temporalHeight / 2 + maxHeight / 2, color);
 				}
