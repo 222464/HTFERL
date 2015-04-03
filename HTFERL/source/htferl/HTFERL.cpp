@@ -450,8 +450,8 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			origin[2] = 0;
 
 			cl::size_t<3> region;
-			region[0] = _htfe.getLayerDescs()[l]._temporalWidth;
-			region[1] = _htfe.getLayerDescs()[l]._temporalHeight;
+			region[0] = _htfe.getLayerDescs()[l]._spatialWidth;
+			region[1] = _htfe.getLayerDescs()[l]._spatialHeight;
 			region[2] = 1;
 
 			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._spatialReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);

@@ -762,13 +762,13 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		
 		Float4 alphas;
 		alphas._x = _layerDescs[l]._predictiveAlpha;
-		alphas._y = _layerDescs[l]._lateralAlpha;
-		alphas._z = _layerDescs[l]._feedBackAlpha;
+		alphas._y = _layerDescs[l]._feedBackAlpha;
+		alphas._z = _layerDescs[l]._lateralAlpha;
 
 		Float4 momenta;
 		momenta._x = _layerDescs[l]._predictiveMomentum;
-		momenta._y = _layerDescs[l]._lateralMomentum;
-		momenta._z = _layerDescs[l]._feedBackMomentum;
+		momenta._y = _layerDescs[l]._feedBackMomentum;
+		momenta._z = _layerDescs[l]._lateralMomentum;
 
 		index = 0;
 

@@ -777,7 +777,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 
 				float2 prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.x * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.x * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.y * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.y * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -798,7 +798,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 
 				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.x * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.x * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.z * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.z * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -934,7 +934,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 
 				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.x * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.x * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.z * (0.5f * (sum * state + (state - recon) * thisState.x) + sparsityPenalty * state) + momenta.z * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
