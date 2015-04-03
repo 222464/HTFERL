@@ -135,7 +135,7 @@ void kernel layerInhibit(read_only image2d_t activations, write_only image2d_t s
 
 	float newState = numHigher < localActivity ? 1.0f : 0.0f;
 
-	float newDeriv = numHigher < localActivity ? 1.0f : minDerivative;
+	float newDeriv = numHigher < localActivity ? thisActivation * (1.0f - thisActivation) : minDerivative * thisActivation * (1.0f - thisActivation);
 
 	write_imagef(states, hiddenPosition, (float4)(newState, newDeriv, 0.0f, 0.0f));
 }
@@ -170,11 +170,11 @@ void kernel layerHiddenStatesSpatialActivate(read_only image2d_t inputs, read_on
 		}
 
 	// Bias
-	//float bias = read_imagef(spatialWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+	float bias = read_imagef(spatialWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 
-	//sum += bias;
+	sum += bias;
 
-	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev, read_only image2d_t nextLayerHiddenStatesTemporal,
@@ -209,9 +209,9 @@ void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSp
 		}
 
 	// Bias
-	//float bias = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+	float bias = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 
-	//sum += bias;
+	sum += bias;
 
 	wi = 0;
 
@@ -247,7 +247,7 @@ void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSp
 			wi++;
 		}
 
-	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev,
@@ -280,9 +280,9 @@ void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStat
 		}
 
 	// Bias
-	//float bias = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
+	float bias = read_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).x;
 
-	//sum += bias;
+	sum += bias;
 
 	wi = 0;
 
@@ -301,7 +301,7 @@ void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStat
 			wi++;
 		}
 
-	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeights, write_only image2d_t inputReconstruction,

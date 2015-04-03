@@ -53,8 +53,8 @@ namespace htfe {
 
 		LayerDesc()
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
-			_receptiveFieldRadius(4), _reconstructionRadius(5), _predictiveRadius(5), _lateralConnectionRadius(5), _spatialInhibitionRadius(4), _temporalInhibitionRadius(5), _feedBackConnectionRadius(5),
-			_spatialSparsity(1.01f / 81.0f), _temporalSparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
+			_receptiveFieldRadius(5), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(4), _temporalInhibitionRadius(6), _feedBackConnectionRadius(6),
+			_spatialSparsity(2.01f / 81.0f), _temporalSparsity(2.01f / 81.0f), _dutyCycleDecay(0.01f),
 			_spatialAlpha(0.01f), _predictiveAlpha(0.01f), _lateralAlpha(0.005f), _feedBackAlpha(0.005f), _reconstructionAlpha(0.05f),
 			_spatialLambda(0.5f), _temporalLambda(0.5f),
 			_spatialMomentum(0.5f), _predictiveMomentum(0.5f), _lateralMomentum(0.5f), _feedBackMomentum(0.5f), _reconstructionMomentum(0.5f),
