@@ -414,7 +414,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getInputHeight();
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._predictedInputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._inputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -454,7 +454,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getLayerDescs()[l]._spatialHeight;
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesSpatial, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -466,15 +466,15 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 			image->create(maxWidth, maxHeight, sf::Color::Transparent);
 
-			for (int x = 0; x < _htfe.getLayerDescs()[l]._temporalWidth; x++)
-				for (int y = 0; y < _htfe.getLayerDescs()[l]._temporalHeight; y++) {
+			for (int x = 0; x < _htfe.getLayerDescs()[l]._spatialWidth; x++)
+				for (int y = 0; y < _htfe.getLayerDescs()[l]._spatialHeight; y++) {
 					sf::Color color;
 
 					color = c;
 
-					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _htfe.getLayerDescs()[l]._temporalWidth)])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[2 * (x + y * _htfe.getLayerDescs()[l]._spatialWidth)])) * (255.0f - 3.0f) + 3;
 
-					image->setPixel(x - _htfe.getLayerDescs()[l]._temporalWidth / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._temporalHeight / 2 + maxHeight / 2, color);
+					image->setPixel(x - _htfe.getLayerDescs()[l]._spatialWidth / 2 + maxWidth / 2, y - _htfe.getLayerDescs()[l]._spatialHeight / 2 + maxHeight / 2, color);
 				}
 
 			images.push_back(image);

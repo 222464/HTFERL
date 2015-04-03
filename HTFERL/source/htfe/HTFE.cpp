@@ -251,7 +251,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 	_layerHiddenStatesTemporalActivateKernel = cl::Kernel(program.getProgram(), "layerHiddenStatesTemporalActivate");
 	_layerHiddenStatesTemporalActivateLastKernel = cl::Kernel(program.getProgram(), "layerHiddenStatesTemporalActivateLast");
 	_layerInputReconstructKernel = cl::Kernel(program.getProgram(), "layerInputReconstruct");
-	_layerInputReconstructGaussianKernel = cl::Kernel(program.getProgram(), "layerInputReconstructGaussian");
+	_layerInputReconstructLinearKernel = cl::Kernel(program.getProgram(), "layerInputReconstructLinear");
 	_layerSpatialReconstructKernel = cl::Kernel(program.getProgram(), "layerSpatialReconstruct");
 	_layerTemporalReconstructKernel = cl::Kernel(program.getProgram(), "layerTemporalReconstruct");
 	_layerNextTemporalReconstructKernel = cl::Kernel(program.getProgram(), "layerNextTemporalReconstruct");
@@ -373,20 +373,20 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		index = 0;
 
 		if (l == 0) {
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._inputReconstruction);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
-			_layerInputReconstructGaussianKernel.setArg(index++, reverseReceptiveRadius);
-			_layerInputReconstructGaussianKernel.setArg(index++, inputSizeMinusOne);
-			_layerInputReconstructGaussianKernel.setArg(index++, inputSizeMinusOneInv);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatial);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatialMinusOne);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatialMinusOneInv);
-			_layerInputReconstructGaussianKernel.setArg(index++, seed);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layerDescs[l]._gaussianNoise);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._inputReconstruction);
+			_layerInputReconstructLinearKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerInputReconstructLinearKernel.setArg(index++, reverseReceptiveRadius);
+			_layerInputReconstructLinearKernel.setArg(index++, inputSizeMinusOne);
+			_layerInputReconstructLinearKernel.setArg(index++, inputSizeMinusOneInv);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatial);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatialMinusOne);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatialMinusOneInv);
+			_layerInputReconstructLinearKernel.setArg(index++, seed);
+			_layerInputReconstructLinearKernel.setArg(index++, _layerDescs[l]._gaussianNoise);
 
-			cs.getQueue().enqueueNDRangeKernel(_layerInputReconstructGaussianKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
+			cs.getQueue().enqueueNDRangeKernel(_layerInputReconstructLinearKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 		}
 		else {
 			_layerInputReconstructKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
@@ -639,20 +639,20 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		index = 0;
 
 		if (l == 0) {	
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._predictedSpatial);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layers[l]._predictedInputReconstruction);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
-			_layerInputReconstructGaussianKernel.setArg(index++, reverseReceptiveRadius);
-			_layerInputReconstructGaussianKernel.setArg(index++, inputSizeMinusOne);
-			_layerInputReconstructGaussianKernel.setArg(index++, inputSizeMinusOneInv);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatial);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatialMinusOne);
-			_layerInputReconstructGaussianKernel.setArg(index++, layerSizeSpatialMinusOneInv);
-			_layerInputReconstructGaussianKernel.setArg(index++, seed);
-			_layerInputReconstructGaussianKernel.setArg(index++, _layerDescs[l]._gaussianNoise);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._predictedSpatial);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
+			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._predictedInputReconstruction);
+			_layerInputReconstructLinearKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
+			_layerInputReconstructLinearKernel.setArg(index++, reverseReceptiveRadius);
+			_layerInputReconstructLinearKernel.setArg(index++, inputSizeMinusOne);
+			_layerInputReconstructLinearKernel.setArg(index++, inputSizeMinusOneInv);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatial);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatialMinusOne);
+			_layerInputReconstructLinearKernel.setArg(index++, layerSizeSpatialMinusOneInv);
+			_layerInputReconstructLinearKernel.setArg(index++, seed);
+			_layerInputReconstructLinearKernel.setArg(index++, _layerDescs[l]._gaussianNoise);
 
-			cs.getQueue().enqueueNDRangeKernel(_layerInputReconstructGaussianKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
+			cs.getQueue().enqueueNDRangeKernel(_layerInputReconstructLinearKernel, cl::NullRange, cl::NDRange(prevWidth, prevHeight));
 		}
 		else {
 			_layerInputReconstructKernel.setArg(index++, _layers[l]._predictedSpatial);

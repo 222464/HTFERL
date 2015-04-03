@@ -55,11 +55,11 @@ namespace htfe {
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
 			_receptiveFieldRadius(4), _reconstructionRadius(5), _predictiveRadius(5), _lateralConnectionRadius(5), _spatialInhibitionRadius(4), _temporalInhibitionRadius(5), _feedBackConnectionRadius(5),
 			_spatialSparsity(1.01f / 81.0f), _temporalSparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_spatialAlpha(0.01f), _predictiveAlpha(0.01f), _lateralAlpha(0.001f), _feedBackAlpha(0.001f), _reconstructionAlpha(0.01f),
+			_spatialAlpha(0.01f), _predictiveAlpha(0.01f), _lateralAlpha(0.005f), _feedBackAlpha(0.005f), _reconstructionAlpha(0.05f),
 			_spatialLambda(0.5f), _temporalLambda(0.5f),
 			_spatialMomentum(0.5f), _predictiveMomentum(0.5f), _lateralMomentum(0.5f), _feedBackMomentum(0.5f), _reconstructionMomentum(0.5f),
-			_lateralScalar(0.1f), _feedBackScalar(0.1f), _blurKernelWidth(1.0f), _numBlurPasses(0), _gaussianNoise(0.05f),
-			_minDerivative(0.05f)
+			_lateralScalar(0.01f), _feedBackScalar(0.01f), _blurKernelWidth(1.0f), _numBlurPasses(0), _gaussianNoise(0.05f),
+			_minDerivative(0.02f)
 		{}
 	};
 
@@ -114,7 +114,7 @@ namespace htfe {
 		cl::Kernel _layerHiddenStatesTemporalActivateKernel;
 		cl::Kernel _layerHiddenStatesTemporalActivateLastKernel;
 		cl::Kernel _layerInputReconstructKernel;
-		cl::Kernel _layerInputReconstructGaussianKernel;
+		cl::Kernel _layerInputReconstructLinearKernel;
 		cl::Kernel _layerSpatialReconstructKernel;
 		cl::Kernel _layerTemporalReconstructKernel;
 		cl::Kernel _layerNextTemporalReconstructKernel;
