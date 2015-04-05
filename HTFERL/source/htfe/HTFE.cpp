@@ -241,7 +241,7 @@ void HTFE::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, in
 			cs.getQueue().enqueueCopyImage(_layers[l]._hiddenStatesTemporal, _layers[l]._hiddenStatesTemporalPrevPrev, origin, origin, region);
 		}
 
-		
+
 		prevWidth = _layerDescs[l]._spatialWidth;
 		prevHeight = _layerDescs[l]._spatialHeight;
 	}
@@ -468,8 +468,8 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		reversePredictiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._temporalHeight) / static_cast<float>(_layerDescs[l]._spatialHeight) * static_cast<float>(_layerDescs.front()._predictiveRadius));
 
 		Int2 reverseReceptiveRadius;
-		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._spatialWidth) / static_cast<float>(prevWidth) * static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
-		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._spatialHeight) / static_cast<float>(prevHeight) * static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
+		reverseReceptiveRadius._x = std::ceil(static_cast<float>(_layerDescs[l]._spatialWidth) / static_cast<float>(prevWidth)* static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
+		reverseReceptiveRadius._y = std::ceil(static_cast<float>(_layerDescs[l]._spatialHeight) / static_cast<float>(prevHeight)* static_cast<float>(_layerDescs.front()._receptiveFieldRadius));
 
 		Int2 nextTemporalSize;
 		Int2 nextTemporalSizeMinusOne;
@@ -590,7 +590,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerTemporalReconstructKernel.setArg(index++, seed);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerTemporalReconstructKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
-	
+
 		index = 0;
 
 		if (l != _layers.size() - 1) {
@@ -628,7 +628,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerSpatialPredictiveReconstructKernel.setArg(index++, layerSizeTemporal);
 		_layerSpatialPredictiveReconstructKernel.setArg(index++, layerSizeTemporalMinusOne);
 		_layerSpatialPredictiveReconstructKernel.setArg(index++, layerSizeTemporalMinusOneInv);
-	
+
 		cs.getQueue().enqueueNDRangeKernel(_layerSpatialPredictiveReconstructKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
 		// --------------------- Input Reconstruction ---------------------
@@ -638,7 +638,7 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 
 		index = 0;
 
-		if (l == 0) {	
+		if (l == 0) {
 			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._predictedSpatial);
 			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
 			_layerInputReconstructLinearKernel.setArg(index++, _layers[l]._predictedInputReconstruction);
@@ -783,11 +783,12 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialAlpha);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialMomentum);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLambda);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerUpdateSpatialWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
 		// Temporal reconstruction and weight update
-		
+
 		Float4 alphas;
 		alphas._x = _layerDescs[l]._predictiveAlpha;
 		alphas._y = _layerDescs[l]._feedBackAlpha;
@@ -823,6 +824,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, momenta);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalLambda);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
@@ -856,6 +858,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, momenta);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalLambda);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._minDerivative);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}

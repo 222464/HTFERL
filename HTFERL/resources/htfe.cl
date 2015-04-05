@@ -129,13 +129,13 @@ void kernel layerInhibit(read_only image2d_t activations, write_only image2d_t s
 			if (layerPosition.x >= 0 && layerPosition.x < layerSize.x && layerPosition.y >= 0 && layerPosition.y < layerSize.y) {
 				float activation = read_imagef(activations, layerPosition).x;
 
-				numHigher += activation >= thisActivation ? 1.0f : 0.0f;
+				numHigher += activation > thisActivation ? 1.0f : 0.0f;
 			}
 		}
 
 	float newState = numHigher < localActivity ? 1.0f : 0.0f;
 
-	float newDeriv = numHigher < localActivity ? thisActivation * (1.0f - thisActivation) : minDerivative * thisActivation * (1.0f - thisActivation);
+	float newDeriv = thisActivation;
 
 	write_imagef(states, hiddenPosition, (float4)(newState, newDeriv, 0.0f, 0.0f));
 }
@@ -174,7 +174,7 @@ void kernel layerHiddenStatesSpatialActivate(read_only image2d_t inputs, read_on
 
 	sum += bias;
 
-	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev, read_only image2d_t nextLayerHiddenStatesTemporal,
@@ -247,7 +247,7 @@ void kernel layerHiddenStatesTemporalActivate(read_only image2d_t hiddenStatesSp
 			wi++;
 		}
 
-	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStatesSpatial, read_only image2d_t hiddenStatesTemporalPrev,
@@ -301,7 +301,7 @@ void kernel layerHiddenStatesTemporalActivateLast(read_only image2d_t hiddenStat
 			wi++;
 		}
 
-	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sigmoid(sum), 0.0f, 0.0f, 0.0f));
+	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(sum, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeights, write_only image2d_t inputReconstruction,
@@ -332,7 +332,7 @@ void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only im
 					int rdy = visiblePosition.y - fieldLowerBounds.y;
 
 					float input = read_imagef(hiddenStates, layerPosition).x;
-					
+
 					int weightIndex = rdy + rdx * (receptiveRadius * 2 + 1);
 
 					float weight = read_imagef(feedForwardWeights, (int4)(layerPosition.x, layerPosition.y, weightIndex, 0)).x;
@@ -342,7 +342,7 @@ void kernel layerInputReconstruct(read_only image2d_t hiddenStates, read_only im
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sum;
 
 	write_imagef(inputReconstruction, visiblePosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -429,7 +429,7 @@ void kernel layerSpatialReconstruct(read_only image2d_t hiddenStates, read_only 
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sum;
 
 	write_imagef(spatialReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -458,7 +458,7 @@ void kernel layerTemporalReconstruct(read_only image2d_t hiddenStates, read_only
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sum;
 
 	write_imagef(temporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -502,13 +502,13 @@ void kernel layerNextTemporalReconstruct(read_only image2d_t hiddenStatesTempora
 			}
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sum;
 
 	write_imagef(nextTemporalReconstruction, hiddenPosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
 
 void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only image2d_t spatialReconstruction, read_only image2d_t hiddenStates, read_only image3d_t feedForwardWeightsPrev, write_only image3d_t feedForwardWeights,
-	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius, int inhibitionRadius, float sparsity, float alpha, float momentum, float lambda)
+	int2 layerSize, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, int receptiveFieldRadius, int inhibitionRadius, float sparsity, float alpha, float momentum, float lambda, float minDerivative)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -542,7 +542,7 @@ void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only imag
 
 	float2 hiddenState = read_imagef(hiddenStates, hiddenPosition).xy;
 
-	sum *= hiddenState.y;
+	float error = -hiddenState.y * minDerivative;
 
 	wi = 0;
 
@@ -555,7 +555,7 @@ void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only imag
 				float recon = read_imagef(spatialReconstruction, inputPosition).x;
 
 				// CD
-				float eligibility = 0.5f * (sum * input + (input - recon) * hiddenState.x);
+				float eligibility = 0.5f * (error * input + (input - recon) * hiddenState.x);
 
 				float2 prevWeight = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
@@ -569,7 +569,7 @@ void kernel layerUpdateSpatialWeights(read_only image2d_t inputs, read_only imag
 		}
 
 	// Bias - CD
-	float eligibility = sum;
+	float eligibility = error;
 
 	float2 prevBias = read_imagef(feedForwardWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
@@ -605,7 +605,7 @@ void kernel layerSpatialPredictiveReconstruct(read_only image2d_t hiddenStates, 
 			wi++;
 		}
 
-	float recon = sum > 0.0f ? 1.0f : 0.0f;
+	float recon = sum;
 
 	write_imagef(predictedSpatial, visiblePosition, (float4)(recon, 0.0f, 0.0f, 0.0f));
 }
@@ -616,7 +616,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 	write_only image3d_t predictiveWeights, write_only image3d_t lateralWeights, write_only image3d_t feedBackWeights,
 	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv, int2 nextSize, int2 nextSizeMinusOne,
 	int predictiveRadius, int lateralConnectionRadius, int feedBackRadius,
-	float sparsity, int inhibitionRadius, float4 alpha, float4 momenta, float lambda)
+	float sparsity, int inhibitionRadius, float4 alpha, float4 momenta, float lambda, float minDerivative)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -689,7 +689,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 			wi++;
 		}
 
-	sum *= thisState.y;
+	float error = -thisState.y * minDerivative;
 
 	// ------------------------------------ Update ------------------------------------
 
@@ -705,7 +705,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 
 				float2 prevWeight = read_imagef(predictiveWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.x * (0.5f * (sum * state + (state - recon) * thisState.x)) + momenta.x * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.x * (0.5f * (error * state + (state - recon) * thisState.x)) + momenta.x * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -717,7 +717,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 	// Bias
 	float2 prevWeight = read_imagef(predictiveWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-	float newWeight = prevWeight.x + alpha.x * (sum) + momenta.x * prevWeight.y;
+	float newWeight = prevWeight.x + alpha.x * error + momenta.x * prevWeight.y;
 	float newDelta = newWeight - prevWeight.x;
 
 	write_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -734,7 +734,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 
 				float2 prevWeight = read_imagef(feedBackWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.y * (0.5f * (sum * state + (state - recon) * thisState.x)) + momenta.y * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.y * (0.5f * (error * state + (state - recon) * thisState.x)) + momenta.y * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(feedBackWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -755,7 +755,7 @@ void kernel layerUpdateTemporalWeights(read_only image2d_t hiddenStatesSpatial, 
 
 				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.z * (0.5f * (sum * state + (state - recon) * thisState.x)) + momenta.z * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.z * (0.5f * (error * state + (state - recon) * thisState.x)) + momenta.z * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -772,7 +772,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 	write_only image3d_t predictiveWeights, write_only image3d_t lateralWeights,
 	int2 layerSize, int2 layerSizeMinusOne, float2 layerSizeMinusOneInv, int2 inputSize, int2 inputSizeMinusOne, float2 inputSizeMinusOneInv,
 	int predictiveRadius, int lateralConnectionRadius,
-	float sparsity, int inhibitionRadius, float4 alpha, float4 momenta, float lambda)
+	float sparsity, int inhibitionRadius, float4 alpha, float4 momenta, float lambda, float minDerivative)
 {
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
@@ -826,7 +826,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 			wi++;
 		}
 
-	sum *= thisState.y;
+	float error = -thisState.y * minDerivative;
 
 	// ------------------------------------ Update ------------------------------------
 
@@ -842,7 +842,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 
 				float2 prevWeight = read_imagef(predictiveWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.x * (0.5f * (sum * state + (state - recon) * thisState.x)) + momenta.x * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.x * (0.5f * (error * state + (state - recon) * thisState.x)) + momenta.x * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -854,7 +854,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 	// Bias
 	float2 prevWeight = read_imagef(predictiveWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-	float newWeight = prevWeight.x + alpha.x * sum + momenta.x * prevWeight.y;
+	float newWeight = prevWeight.x + alpha.x * error + momenta.x * prevWeight.y;
 	float newDelta = newWeight - prevWeight.x;
 
 	write_imagef(predictiveWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));
@@ -871,7 +871,7 @@ void kernel layerUpdateTemporalWeightsLast(read_only image2d_t hiddenStatesSpati
 
 				float2 prevWeight = read_imagef(lateralWeightsPrev, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0)).xy;
 
-				float newWeight = prevWeight.x + alpha.z * (0.5f * (sum * state + (state - recon) * thisState.x)) + momenta.z * prevWeight.y;
+				float newWeight = prevWeight.x + alpha.z * (0.5f * (error * state + (state - recon) * thisState.x)) + momenta.z * prevWeight.y;
 				float newDelta = newWeight - prevWeight.x;
 
 				write_imagef(lateralWeights, (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0), (float4)(newWeight, newDelta, 0.0f, 0.0f));

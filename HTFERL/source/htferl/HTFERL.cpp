@@ -21,7 +21,7 @@ struct Int2 {
 	int _x, _y;
 };
 
-void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
+void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	_htfe.createRandom(cs, program, inputWidth, inputHeight, layerDescs, minInitWeight, maxInitWeight);
@@ -33,10 +33,12 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 
 	_prevValue = 0.0f;
 
+	_actionQRadius = actionQRadius;
+
 	_input.clear();
 	_input.resize(inputWidth * inputHeight);
 
-	int numReconstructionWeightsFirst = std::pow(layerDescs.front()._reconstructionRadius * 2 + 1, 2);
+	int numReconstructionWeightsFirst = std::pow(_actionQRadius * 2 + 1, 2);
 
 	// Initialize action portions randomly
 	for (int i = 0; i < _input.size(); i++)
@@ -101,7 +103,7 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 	layerOverInput._x = static_cast<float>(_htfe.getLayerDescs().front()._temporalWidth - 1) / static_cast<float>(_htfe.getInputWidth() - 1);
 	layerOverInput._y = static_cast<float>(_htfe.getLayerDescs().front()._temporalHeight - 1) / static_cast<float>(_htfe.getInputHeight() - 1);
 
-	std::vector<float> firstHiddenVerbose(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
+	std::vector<Float2> firstHiddenVerbose(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
 
 	// Exploratory action
 	std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
@@ -118,13 +120,13 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 		region[1] = _htfe.getLayerDescs().front()._temporalHeight;
 		region[2] = 1;
 
-		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._predictedSpatial, CL_TRUE, origin, region, 0, 0, firstHiddenVerbose.data());
+		cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, firstHiddenVerbose.data());
 	}
 
 	std::vector<float> firstHidden(_htfe.getLayerDescs().front()._temporalWidth * _htfe.getLayerDescs().front()._temporalHeight);
 
 	for (int i = 0; i < firstHidden.size(); i++)
-		firstHidden[i] = firstHiddenVerbose[i];
+		firstHidden[i] = firstHiddenVerbose[i]._x;
 
 	// Find nextQ
 	float nextQ = 0.0f;
@@ -138,8 +140,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 		int wi = 0;
 
-		for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-			for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+		for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+			for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 				int x = cx + dx;
 				int y = cy + dy;
 
@@ -175,8 +177,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 		int wi = 0;
 
-		for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-			for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+		for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+			for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 				int x = cx + dx;
 				int y = cy + dy;
 
@@ -242,8 +244,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 			int wi = 0;
 
-			for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-				for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+			for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+				for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 					int x = cx + dx;
 					int y = cy + dy;
 
@@ -260,8 +262,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 			wi = 0;
 
-			for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-				for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+			for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+				for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 					int x = cx + dx;
 					int y = cy + dy;
 
@@ -284,8 +286,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 			int wi = 0;
 
-			for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-				for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+			for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+				for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 					int x = cx + dx;
 					int y = cy + dy;
 
@@ -307,8 +309,8 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 			wi = 0;
 
-			for (int dx = -_htfe.getLayerDescs().front()._reconstructionRadius; dx <= _htfe.getLayerDescs().front()._reconstructionRadius; dx++)
-				for (int dy = -_htfe.getLayerDescs().front()._reconstructionRadius; dy <= _htfe.getLayerDescs().front()._reconstructionRadius; dy++) {
+			for (int dx = -_actionQRadius; dx <= _actionQRadius; dx++)
+				for (int dy = -_actionQRadius; dy <= _actionQRadius; dy++) {
 					int x = cx + dx;
 					int y = cy + dy;
 
@@ -414,7 +416,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getInputHeight();
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._inputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._predictedInputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
@@ -454,7 +456,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			region[1] = _htfe.getLayerDescs()[l]._spatialHeight;
 			region[2] = 1;
 
-			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesTemporal, CL_TRUE, origin, region, 0, 0, &state[0]);
+			cs.getQueue().enqueueReadImage(_htfe.getLayers()[l]._hiddenStatesSpatial, CL_TRUE, origin, region, 0, 0, &state[0]);
 
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;

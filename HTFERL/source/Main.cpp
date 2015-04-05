@@ -178,7 +178,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}*/
 
-	for (int i = 0; i < 1; i++) {
+	for (int i = 0; i < 2; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -190,7 +190,7 @@ int main() {
 		actionIndices.push_back(x + y * 64);
 	}
 
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < 8; i++) {
 		int x = actionXDist(generator);
 		int y = actionYDist(generator);
 
@@ -200,7 +200,7 @@ int main() {
 		inputTypes[x + y * 64] = htferl::HTFERL::_q;
 	}
 
-	agent.createRandom(cs, program, 64, 64, layerDescs, inputTypes, -0.05f, 0.05f, generator);
+	agent.createRandom(cs, program, 64, 64, layerDescs, inputTypes, 7, -0.05f, 0.05f, generator);
 
 	sf::RenderTexture htmRT;
 	htmRT.create(1024, 1024, false);
@@ -297,7 +297,7 @@ int main() {
 			agent.setInput(x, y, img.getPixel(x, y).r / 255.0f);
 		}
 
-		agent.step(cs, reward * 0.01f, 0.1f, 0.995f, 0.1f, 0.1f, 0.01f, 0.01f, 0.01f, 0.01f, 0.5f, 1.0f, 400, 300, generator);
+		agent.step(cs, reward * 0.05f, 0.5f, 0.995f, 0.05f, 0.05f, 0.05f, 0.01f, 0.005f, 0.005f, 0.1f, 1.0f, 400, 200, generator);
 
 		float output = 0.0f;
 		int c = 0;
