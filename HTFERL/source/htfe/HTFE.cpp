@@ -349,7 +349,6 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		_layerHiddenStatesSpatialActivateKernel.setArg(index++, inputSizeMinusOne);
 		_layerHiddenStatesSpatialActivateKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
 		_layerHiddenStatesSpatialActivateKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
-		_layerHiddenStatesSpatialActivateKernel.setArg(index++, _layerDescs[l]._minDerivative);
 		_layerHiddenStatesSpatialActivateKernel.setArg(index++, activateFeedForwardSeed);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesSpatialActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
@@ -357,11 +356,12 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		index = 0;
 
 		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenActivationsSpatial);
+		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenStatesSpatialPrev);
 		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
 		_layerInhibitKernel.setArg(index++, layerSizeSpatial);
 		_layerInhibitKernel.setArg(index++, _layerDescs[l]._spatialInhibitionRadius);
 		_layerInhibitKernel.setArg(index++, localActivity);
-		_layerInhibitKernel.setArg(index++, _layerDescs[l]._minDerivative);
+		_layerInhibitKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
@@ -514,7 +514,6 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
-			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, _layerDescs[l]._minDerivative);
 			_layerHiddenStatesTemporalActivateLastKernel.setArg(index++, activateFeedBackSeed);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesTemporalActivateLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
@@ -537,7 +536,6 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
-			_layerHiddenStatesTemporalActivateKernel.setArg(index++, _layerDescs[l]._minDerivative);
 			_layerHiddenStatesTemporalActivateKernel.setArg(index++, activateFeedBackSeed);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerHiddenStatesTemporalActivateKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
@@ -546,11 +544,12 @@ void HTFE::activate(sys::ComputeSystem &cs, std::mt19937 &generator) {
 		index = 0;
 
 		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenActivationsTemporal);
+		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenStatesTemporalPrev);
 		_layerInhibitKernel.setArg(index++, _layers[l]._hiddenStatesTemporal);
 		_layerInhibitKernel.setArg(index++, layerSizeTemporal);
 		_layerInhibitKernel.setArg(index++, _layerDescs[l]._temporalInhibitionRadius);
 		_layerInhibitKernel.setArg(index++, localActivity);
-		_layerInhibitKernel.setArg(index++, _layerDescs[l]._minDerivative);
+		_layerInhibitKernel.setArg(index++, _layerDescs[l]._dutyCycleDecay);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerInhibitKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 
@@ -770,6 +769,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 
 		_layerUpdateSpatialWeightsKernel.setArg(index++, *pPrevLayer);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._inputReconstruction);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenActivationsSpatial);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeights);
@@ -783,7 +783,8 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialAlpha);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialMomentum);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLambda);
-		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._minDerivative);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._dominationFactor);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerUpdateSpatialWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
@@ -803,6 +804,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 
 		if (l == _layers.size() - 1) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layers[l]._hiddenActivationsTemporal);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layers[l]._hiddenStatesTemporal);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layers[l]._hiddenStatesTemporalPrev);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layers[l]._spatialReconstruction);
@@ -824,12 +826,14 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, momenta);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalLambda);
-			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._minDerivative);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._dominationFactor);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
 		else {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l]._hiddenActivationsTemporal);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l]._hiddenStatesTemporal);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l]._hiddenStatesTemporalPrev);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layers[l + 1]._hiddenStatesTemporal);
@@ -858,7 +862,8 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, momenta);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalLambda);
-			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._minDerivative);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._dominationFactor);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
