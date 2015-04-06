@@ -779,7 +779,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, inputSizeMinusOne);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._receptiveFieldRadius);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialInhibitionRadius);
-		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialSparsity);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLifetimeSparsity);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialAlpha);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialMomentum);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLambda);
@@ -822,7 +822,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, layerSizeSpatialMinusOneInv);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
-			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalSparsity);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalLifetimeSparsity);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalInhibitionRadius);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, momenta);
@@ -859,7 +859,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._predictiveRadius);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._lateralConnectionRadius);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._feedBackConnectionRadius);
-			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalSparsity);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalLifetimeSparsity);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalInhibitionRadius);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, alphas);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, momenta);
