@@ -137,7 +137,7 @@ void kernel layerInhibit(read_only image2d_t activations, read_only image2d_t st
 
 	float newState = numHigher < localActivity ? 1.0f : 0.0f;
 
-	float newDutyCycle = (1.0f - dutyCycleDecay) * dutyCyclePrev + dutyCycleDecay * newState;
+	float newDutyCycle = (1.0f - dutyCycleDecay) * dutyCyclePrev + dutyCycleDecay * thisActivation;
 
 	write_imagef(states, hiddenPosition, (float4)(newState, newDutyCycle, 0.0f, 0.0f));
 }
