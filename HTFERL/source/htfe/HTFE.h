@@ -51,16 +51,17 @@ namespace htfe {
 
 		float _dominationFactor;
 		float _lifetimeSparsityCorrectionFactor;
+		float _boostIntensity;
 
 		LayerDesc()
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
-			_receptiveFieldRadius(5), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(5), _temporalInhibitionRadius(6), _feedBackConnectionRadius(6),
-			_spatialSparsity(1.01f / 121.0f), _temporalSparsity(1.01f / 121.0f), _dutyCycleDecay(0.01f),
-			_spatialAlpha(0.008f), _predictiveAlpha(0.04f), _lateralAlpha(0.04f), _feedBackAlpha(0.04f), _reconstructionAlpha(0.15f),
+			_receptiveFieldRadius(5), _reconstructionRadius(6), _predictiveRadius(6), _lateralConnectionRadius(6), _spatialInhibitionRadius(4), _temporalInhibitionRadius(6), _feedBackConnectionRadius(6),
+			_spatialSparsity(2.01f / 81.0f), _temporalSparsity(2.01f / 81.0f), _dutyCycleDecay(0.0002f),
+			_spatialAlpha(0.02f), _predictiveAlpha(0.05f), _lateralAlpha(0.05f), _feedBackAlpha(0.05f), _reconstructionAlpha(0.15f),
 			_spatialLambda(0.5f), _temporalLambda(0.5f),
 			_spatialMomentum(0.0f), _predictiveMomentum(0.0f), _lateralMomentum(0.0f), _feedBackMomentum(0.0f), _reconstructionMomentum(0.0f),
 			_lateralScalar(0.05f), _feedBackScalar(0.05f), _blurKernelWidth(1.0f), _numBlurPasses(0), _gaussianNoise(0.05f),
-			_dominationFactor(0.0f), _lifetimeSparsityCorrectionFactor(100.0f)
+			_dominationFactor(0.01f), _lifetimeSparsityCorrectionFactor(0.2f), _boostIntensity(2.0f)
 		{}
 	};
 

@@ -785,6 +785,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._spatialLambda);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._dominationFactor);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layerDescs[l]._boostIntensity);
 
 		cs.getQueue().enqueueNDRangeKernel(_layerUpdateSpatialWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._spatialWidth, _layerDescs[l]._spatialHeight));
 
@@ -828,6 +829,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._temporalLambda);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._dominationFactor);
 			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
+			_layerUpdateTemporalWeightsLastKernel.setArg(index++, _layerDescs[l]._boostIntensity);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsLastKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
@@ -864,6 +866,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._temporalLambda);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._dominationFactor);
 			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._lifetimeSparsityCorrectionFactor);
+			_layerUpdateTemporalWeightsKernel.setArg(index++, _layerDescs[l]._boostIntensity);
 
 			cs.getQueue().enqueueNDRangeKernel(_layerUpdateTemporalWeightsKernel, cl::NullRange, cl::NDRange(_layerDescs[l]._temporalWidth, _layerDescs[l]._temporalHeight));
 		}
