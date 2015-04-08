@@ -17,6 +17,10 @@ namespace htferl {
 			_state = 0, _action = 1, _q = 2
 		};
 
+		enum Orientation {
+			_horizontal = 0, _vertical = 1
+		};
+
 		static float sigmoid(float x) {
 			return 1.0f / (1.0f + std::exp(-x));
 		}
@@ -82,8 +86,11 @@ namespace htferl {
 		std::vector<float> _maxActionPrev;
 		std::vector<float> _hiddenStatesPrev;
 
+		Orientation _qOrientation;
+		Orientation _actionOrientation;
+
 	public:
-		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
+		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
 		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, int replayChainSize, int replayCount, std::mt19937 &generator);
 

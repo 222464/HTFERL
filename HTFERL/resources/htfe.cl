@@ -55,7 +55,7 @@ void kernel initializeLayerHiddenSpatial(
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
-	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(0.0f, randFloat(&seedValue), 0.0f, 0.0f));
+	write_imagef(hiddenStatesSpatial, hiddenPosition, (float4)(0.0f, spatialSparsity, 0.0f, 0.0f));
 
 	for (int wi = 0; wi < spatialSize; wi++) {
 		int4 weightPosition = (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0);
@@ -86,7 +86,7 @@ void kernel initializeLayerHiddenTemporal(
 
 	int2 hiddenPosition = (int2)(get_global_id(0), get_global_id(1));
 
-	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(0.0f, randFloat(&seedValue), 0.0f, 0.0f));
+	write_imagef(hiddenStatesTemporal, hiddenPosition, (float4)(0.0f, temporalSparsity, 0.0f, 0.0f));
 
 	for (int wi = 0; wi < predictiveSize; wi++) {
 		int4 weightPosition = (int4)(hiddenPosition.x, hiddenPosition.y, wi, 0);

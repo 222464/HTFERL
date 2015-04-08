@@ -21,7 +21,7 @@ struct Int2 {
 	int _x, _y;
 };
 
-void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
+void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
 	_htfe.createRandom(cs, program, inputWidth, inputHeight, layerDescs, minInitWeight, maxInitWeight);
@@ -38,6 +38,9 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 	_input.clear();
 	_input.resize(inputWidth * inputHeight);
 
+	_qOrientation = qOrientation;
+	_actionOrientation = actionOrientation;
+
 	int numReconstructionWeightsFirst = std::pow(_actionQRadius * 2 + 1, 2);
 
 	// Initialize action portions randomly
@@ -46,6 +49,13 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			float value = actionDist(generator);
 
 			_input[i] = value;
+
+			if (_actionOrientation == _horizontal) {
+				int x = i % inputWidth;
+				int y = i / inputWidth;
+
+				_input[(x + 1) + y * inputWidth] = value + 1.0f;
+			}
 
 			ActionNode actionNode;
 
@@ -59,6 +69,8 @@ void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, 
 			_actionNodes.push_back(actionNode);
 		}
 		else if (_inputTypes[i] == _q) {
+			_input[i] = 0.0f;
+
 			QNode qNode;
 
 			qNode._index = i;
@@ -335,11 +347,47 @@ void HTFERL::step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGam
 
 	_prevValue = nextQ;
 
-	for (int i = 0; i < _qNodes.size(); i++)
-		_input[_qNodes[i]._index] = nextQ;
+	if (_qOrientation == _horizontal) {
+		for (int i = 0; i < _qNodes.size(); i++) {
+			_input[_qNodes[i]._index] = nextQ;
 
-	for (int i = 0; i < _actionNodes.size(); i++)
-		_input[_actionNodes[i]._index] = _actionNodes[i]._output;
+			int x = _qNodes[i]._index % _htfe.getInputWidth();
+			int y = _qNodes[i]._index / _htfe.getInputWidth();
+
+			_input[(x + 1) + y * _htfe.getInputWidth()] = nextQ + 1.0f;
+		}
+	}
+	else {
+		for (int i = 0; i < _qNodes.size(); i++) {
+			_input[_qNodes[i]._index] = nextQ;
+
+			int x = _qNodes[i]._index % _htfe.getInputWidth();
+			int y = _qNodes[i]._index / _htfe.getInputWidth();
+
+			_input[x + (y + 1) * _htfe.getInputWidth()] = nextQ + 1.0f;
+		}
+	}
+
+	if (_actionOrientation == _horizontal) {
+		for (int i = 0; i < _actionNodes.size(); i++) {
+			_input[_actionNodes[i]._index] = _actionNodes[i]._output;
+
+			int x = _actionNodes[i]._index % _htfe.getInputWidth();
+			int y = _actionNodes[i]._index / _htfe.getInputWidth();
+
+			_input[(x + 1) + y * _htfe.getInputWidth()] = _actionNodes[i]._output + 1.0f;
+		}
+	}
+	else {
+		for (int i = 0; i < _actionNodes.size(); i++) {
+			_input[_actionNodes[i]._index] = _actionNodes[i]._output;
+
+			int x = _actionNodes[i]._index % _htfe.getInputWidth();
+			int y = _actionNodes[i]._index / _htfe.getInputWidth();
+
+			_input[x + (y + 1) * _htfe.getInputWidth()] = _actionNodes[i]._output + 1.0f;
+		}
+	}
 
 	for (int i = 0; i < _actionNodes.size(); i++) {
 		_actionPrev[i] = _actionNodes[i]._output;
