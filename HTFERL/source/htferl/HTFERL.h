@@ -90,7 +90,7 @@ namespace htferl {
 		Orientation _actionOrientation;
 
 	public:
-		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
+		void createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, int reconstructionRadius, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator);
 	
 		void step(sys::ComputeSystem &cs, float reward, float qAlpha, float qGamma, float breakChance, float perturbationStdDev, float alphaQ, float alphaAction, float qTraceDecay, float actionTraceDecay, float actionTraceBeta, float actionTraceTemperature, int replayChainSize, int replayCount, std::mt19937 &generator);
 

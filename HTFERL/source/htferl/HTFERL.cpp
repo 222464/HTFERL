@@ -21,10 +21,10 @@ struct Int2 {
 	int _x, _y;
 };
 
-void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
+void HTFERL::createRandom(sys::ComputeSystem &cs, sys::ComputeProgram &program, int inputWidth, int inputHeight, int reconstructionRadius, const std::vector<htfe::LayerDesc> &layerDescs, const std::vector<InputType> &inputTypes, Orientation qOrientation, Orientation actionOrientation, int actionQRadius, float minInitWeight, float maxInitWeight, std::mt19937 &generator) {
 	std::uniform_int_distribution<int> seedDist(0, 99999);
 
-	_htfe.createRandom(cs, program, inputWidth, inputHeight, layerDescs, minInitWeight, maxInitWeight);
+	_htfe.createRandom(cs, program, inputWidth, inputHeight, reconstructionRadius, layerDescs, minInitWeight, maxInitWeight);
 
 	_inputTypes = inputTypes;
 
@@ -452,20 +452,6 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 			images.push_back(image);
 		}
 		else {
-			std::vector<float> state(_htfe.getInputWidth() * _htfe.getInputHeight());
-
-			cl::size_t<3> origin;
-			origin[0] = 0;
-			origin[1] = 0;
-			origin[2] = 0;
-
-			cl::size_t<3> region;
-			region[0] = _htfe.getInputWidth();
-			region[1] = _htfe.getInputHeight();
-			region[2] = 1;
-
-			cs.getQueue().enqueueReadImage(_htfe.getLayers().front()._predictedInputReconstruction, CL_TRUE, origin, region, 0, 0, &state[0]);
-
 			sf::Color c;
 			c.r = uniformDist(generator) * 255.0f;
 			c.g = uniformDist(generator) * 255.0f;
@@ -482,7 +468,7 @@ void HTFERL::exportStateData(sys::ComputeSystem &cs, std::vector<std::shared_ptr
 
 					color = c;
 
-					color.a = std::min<float>(1.0f, std::max<float>(0.0f, state[(x + y * _htfe.getInputWidth())])) * (255.0f - 3.0f) + 3;
+					color.a = std::min<float>(1.0f, std::max<float>(0.0f, _htfe.getPrediction(x + y * _htfe.getInputWidth()))) * (255.0f - 3.0f) + 3;
 
 					image->setPixel(x - _htfe.getInputWidth() / 2 + maxWidth / 2, y - _htfe.getInputHeight() / 2 + maxHeight / 2, color);
 				}
