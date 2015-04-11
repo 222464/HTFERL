@@ -163,8 +163,8 @@ int main() {
 
 	std::vector<htferl::HTFERL::InputType> inputTypes(64 * 64, htferl::HTFERL::_state);
 
-	std::uniform_int_distribution<int> actionXDist(0, 62);
-	std::uniform_int_distribution<int> actionYDist(33, 62);
+	std::uniform_int_distribution<int> actionXDist(0, 63);
+	std::uniform_int_distribution<int> actionYDist(33, 63);
 
 	std::vector<int> actionIndices;
 
@@ -200,7 +200,7 @@ int main() {
 		inputTypes[x + y * 64] = htferl::HTFERL::_q;
 	}
 
-	agent.createRandom(cs, program, 64, 64, 6, layerDescs, inputTypes, htferl::HTFERL::_horizontal, htferl::HTFERL::_horizontal, 7, -0.05f, 0.05f, generator);
+	agent.createRandom(cs, program, 64, 64, layerDescs, inputTypes, 7, -0.4f, 0.4f, generator);
 
 	sf::RenderTexture htmRT;
 	htmRT.create(1024, 1024, false);
