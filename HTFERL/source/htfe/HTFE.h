@@ -58,12 +58,12 @@ namespace htfe {
 		LayerDesc()
 			: _spatialWidth(16), _spatialHeight(16), _temporalWidth(16), _temporalHeight(16),
 			_receptiveFieldRadius(6), _reconstructionRadius(7), _predictiveRadius(6), _lateralConnectionRadius(7), _spatialInhibitionRadius(4), _temporalInhibitionRadius(4), _feedBackConnectionRadius(7),
-			_spatialSparsity(1.01f / 81.0f), _spatialLifetimeSparsity(1.01f / 81.0f), _temporalSparsity(1.01f / 81.0f), _temporalLifetimeSparsity(1.01f / 81.0f), _dutyCycleDecay(0.01f),
-			_spatialAlpha(0.05f), _predictiveAlpha(0.1f), _lateralAlpha(0.05f), _feedBackAlpha(0.1f), _reconstructionAlpha(0.15f),
+			_spatialSparsity(1.01f / 81.0f), _spatialLifetimeSparsity(1.01f / 81.0f), _temporalSparsity(1.01f / 81.0f), _temporalLifetimeSparsity(1.01f / 81.0f), _dutyCycleDecay(0.005f),
+			_spatialAlpha(0.05f), _predictiveAlpha(0.05f), _lateralAlpha(0.05f), _feedBackAlpha(0.05f), _reconstructionAlpha(0.1f),
 			_spatialLambda(0.5f), _temporalLambda(0.5f),
 			_spatialMomentum(0.0f), _predictiveMomentum(0.0f), _lateralMomentum(0.0f), _feedBackMomentum(0.0f), _reconstructionMomentum(0.0f),
 			_lateralScalar(0.05f), _feedBackScalar(0.5f), _blurKernelWidth(1.0f), _numBlurPasses(0), _gaussianNoise(0.05f),
-			_dominationFactor(1.0f), _lifetimeSparsityCorrectionFactor(2.0f), _boostIntensity(5.0f)
+			_dominationFactor(1.0f), _lifetimeSparsityCorrectionFactor(5.0f), _boostIntensity(5.0f)
 		{}
 	};
 

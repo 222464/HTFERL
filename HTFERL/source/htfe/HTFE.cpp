@@ -702,6 +702,7 @@ void HTFE::learn(sys::ComputeSystem &cs) {
 		_layerUpdateSpatialWeightsKernel.setArg(index++, *pPrevLayer);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenActivationsSpatial);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatial);
+		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._hiddenStatesSpatialPrev);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeightsPrev);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, _layers[l]._spatialWeights);
 		_layerUpdateSpatialWeightsKernel.setArg(index++, layerSizeSpatial);

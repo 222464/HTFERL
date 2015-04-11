@@ -28,10 +28,10 @@ namespace htferl {
 	private:
 		struct OutputConnection {
 			float _weight;
-			//float _trace;
+			float _trace;
 
 			OutputConnection()
-			//	: _trace(0.0f)
+				: _trace(0.0f)
 			{}
 		};
 
